@@ -36,33 +36,36 @@ export async function getNewIntegrations(number: number) {
   return randomIntegrations;
 }
 
-getNewIntegrations(10).then(integrations => console.log(integrations));
+function removeDependencies(obj: any, substring:string): any {
+  const dependencies = obj.dependencies;
+  return Object.keys(dependencies).reduce((acc, key) => {
+    if (!key.includes(substring)) {
+      acc[key] = dependencies[key];
+    }
+    return acc;
+  }, {} as { [key: string]: string });
+}
 
-// const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
-//
-// async function getFetchTsFiles(owner, repo) {
-//   try {
-//     // This gets up to 100 top-level entries from the root of the repo.
-//     // If the repository is large and has more than 100 files/folders, pagination will be needed.
-//     const response = await octokit.repos.getContent({
-//       owner: owner,
-//       repo: repo,
-//     });
-//
-//     const files = response.data;
-//     
-//     if (Array.isArray(files)) {
-//       const fetchTsFiles = files.filter(file => file.name.endsWith('.fetch.ts'));
-//       
-//       // If you only want the paths:
-//       const filePaths = fetchTsFiles.map(file => file.path);
-//
-//       console.log(filePaths);
-//       return filePaths;
-//     }
-//   } catch (error) {
-//     console.error(error);
-//   }
-// }
-//
-// getFetchTsFiles('windmill-labs', 'windmill-integrations');
+export async function getScripts(integration: string) {
+  const { data: data1 } = await octokit.repos.getContent({
+    owner,
+    repo,
+    path: `packages/pieces/community/${integration}/package.json`,
+  });
+
+  if (Array.isArray(data1) || data1.type !== "file") {
+    throw new Error("Invalid integration folder structure");
+  }
+
+  const { content } = data1;
+
+  const packages = JSON.parse(Buffer.from(content, "base64").toString("utf8"));
+  const dependencies = removeDependencies(packages, "activepieces");
+  console.log(packages)
+  console.log(dependencies);
+  return packages
+}
+
+// getNewIntegrations(10).then(integrations => console.log(integrations));
+getScripts("claude").then(packages => packages);
+
