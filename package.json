@@ -7,5 +7,10 @@
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.0",
+    "glob": "^10.4.2",
+    "openai": "^4.52.0"
   }
 }
