@@ -137,7 +137,7 @@ export async function getScripts(integration: string) {
   } catch (error) {
     console.log("No triggers found.")
     // console.error("Error fetching repository content:", error.message);
-    return { actions, undefined, dependencies };
+    return { actions, triggers: [], dependencies };
   }
 
   if (!Array.isArray(data3)) {
@@ -185,15 +185,56 @@ export async function getScripts(integration: string) {
     });
   }
 
-  console.log(actions, triggers, dependencies);
-
   return { actions, triggers, dependencies }
 }
 
 // getNewIntegrations(10).then(integrations => console.log(integrations));
 // getScripts("claude").then(packages => packages);
-getScripts("google-sheets").then(packages => packages);
+// getScripts("google-sheets");
+// console.log(await getScripts("google-sheets"));
+// console.log(await getScripts("claude"));
+// console.log(await getScripts("beamer"));
+console.log(await getScripts("binance"));
 
-// go into src/lib/
-// find all the files that are *.ts
-//
+
+// export async function writePrompts(
+//   integration: string,
+//   ignoreActions: boolean,
+//   existingPrompts: Prompts | undefined
+// ) {
+//   console.log("Generating prompts for " + integration);
+//   try {
+//     const { actions, triggers, dependencies } = await getScripts(integration);
+//     await mkdir("hub/" + integration + "/scripts", { recursive: true });
+//     await Bun.write(
+//       "hub/" + integration + "/scripts/prompts.json",
+//       JSON.stringify(
+//         {
+//           actions: actions.map((a) => ({
+//             ...a,
+//             ignore: ignoreActions,
+//             ...existingPrompts?.actions?.find((a2) => a.id === a2.id),
+//           })),
+//           triggers: triggers.map((t) => ({
+//             ...t,
+//             ignore: false,
+//             ...existingPrompts?.triggers?.find((t2) => t.id === t2.id),
+//           })),
+//           dependencies: existingPrompts?.dependencies ?? dependencies,
+//           useFetch: existingPrompts?.useFetch ?? false,
+//         },
+//         null,
+//         2
+//       )
+//     );
+//     return true;
+//   } catch (err) {
+//     console.error(
+//       "Could not get actions instructions for " +
+//         integration +
+//         "\nYou will have to create scripts manually " +
+//         err
+//     );
+//     return false;
+//   }
+// }
