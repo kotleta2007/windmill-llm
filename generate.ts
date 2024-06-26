@@ -1,5 +1,6 @@
 import { glob } from "glob";
 import { OpenAI } from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/index.mjs";
 import { getScripts } from "./scripts.ts"
 
 const openai = new OpenAI({
@@ -19,68 +20,6 @@ assistant: \`\`\`typescript
 {code}
 \`\`\``;
 
-// export async function codegenLLM(
-//   integration: string,
-//   action: {
-//     name: string | undefined;
-//     description: string | undefined;
-//     id: string;
-//   },
-//   dependencies: string[] | undefined,
-//   useFetch: boolean = true,
-//   firstCode: string | undefined,
-//   kind: "action" | "trigger" = "action"
-// ) {
-//   const messages: ChatCompletionMessageParam[] = [
-//     {
-//       role: "system",
-//       content:
-//         (kind === "trigger"
-//           ? triggerSystemPrompt
-//           : useFetch
-//           ? fetchSystemPrompt
-//           : systemPrompt) +
-//         (firstCode
-//           ? `\n\nHere's an example script for this integration:\n\`\`\`typescript\n${firstCode}\n\`\`\``
-//           : ""),
-//     },
-//     {
-//       role: "user",
-//       content:
-//         fetchSystemPrompt
-//           .replace("{description}", action.description || "")
-//           .replace("{integration}", integration)
-//           +
-//         ((kind === "trigger" || !useFetch) && dependencies?.length > 0
-//           ? "\n\nThese libraries might be useful: {dependencies}".replace(
-//               "{dependencies}",
-//               dependencies.join(", ")
-//             )
-//           : ""),
-//     },
-//   ];
-//
-//   console.log("Before generation");
-//
-//   try {
-//     const response = await openai.chat.completions.create({
-//       messages,
-//       model: "gpt-4",
-//       max_tokens: 1024,
-//       temperature: 0,
-//     });
-//     const content: string = response.choices[0].message.content;
-//     const match = content.match(/```typescript\n([\s\S]*?)\n```/);
-//     const code = match?.[1];
-//     
-//     console.log("Got result");
-//     console.log(content);
-//     return code;
-//   } catch (err) {
-//     console.error(err);
-//   }
-// }
-
 const prompt = `
 Create a script which should: {description} in {integration}
 The type name for the authentication information should be exactly {capitalizedIntegration}
@@ -90,23 +29,42 @@ export function capitalizeFirstLetter(str: string): string {
   return str[0].toUpperCase() + str.slice(1);
 }
 
-
 const integration = "binance";
 
 const { actions, triggers, dependencies } = await getScripts(integration);
 
 const action = actions[0];
 
+const send_post_request_question: string = "Send POST Request";
+
+const send_post_request_code: string = `
+export async function main(url: string, body: object = {}) {
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  return {
+    ok: resp.ok,
+    status: resp.status,
+    text: await resp.text(),
+  };
+}
+`;
+
+function setCodeExample(question: string, codeExample: string): string {
+  return fetchSystemPrompt
+    .replace("{sample_question}", question)
+    .replace("{code}", codeExample)
+}
+
 const messages: ChatCompletionMessageParam[] = [
   {
     role: "system",
-    content:
-      // (
-      fetchSystemPrompt
-      // ) +
-      // (firstCode
-      //   ? `\n\nHere's an example script for this integration:\n\`\`\`typescript\n${firstCode}\n\`\`\``
-      //   : ""),
+    content: setCodeExample(send_post_request_question, send_post_request_code),
   },
   {
     role: "user",
@@ -118,16 +76,8 @@ const messages: ChatCompletionMessageParam[] = [
           "{capitalizedIntegration}",
           capitalizeFirstLetter(integration)
         )
-      //   +
-      // (dependencies?.length > 0
-      //   ? "\n\nThese libraries might be useful: {dependencies}".replace(
-      //       "{dependencies}",
-      //       dependencies.join(", ")
-      //     )
-      //   : ""),
   },
 ];
-
 
 try {
   const response = await openai.chat.completions.create({
@@ -147,15 +97,3 @@ try {
   console.error(err);
 }
 
-
-// console.log("Generating example code");
-// const result = await (codegenLLM(
-//   "Reddit",
-//   {
-//     name: "Top 10 posts in the given subreddit",
-//     description: "Fetch data using the Reddit API and return it",
-//     id: "1",
-//   },
-// ));
-//
-// console.log(result);
