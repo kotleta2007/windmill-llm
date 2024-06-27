@@ -23,7 +23,7 @@ async function activePiecesCommonFiles(integration: string, filepaths: string[])
   );
 }
 
-export function capitalizeFirstLetter(str: string): string {
+function capitalizeFirstLetter(str: string): string {
   return str[0].toUpperCase() + str.slice(1);
 }
 
