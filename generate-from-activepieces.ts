@@ -53,13 +53,13 @@ async function findScriptInRepoRecursive(
   }
 }
 
-async function findMultipleScripts(): Promise<Map<string, string>> {
+async function findMultipleScripts(integration: string): Promise<Map<string, string>> {
   const results = new Map<string, string>();
-  const basePathPrefix = "packages/pieces/community/clarifai/";
+  const basePathPrefix = `packages/pieces/community/${integration}/`;
 
-  // Get index.ts from clarifai/src
+  // Get index.ts from ${integration}/src
   const indexContent = await findScriptInRepoRecursive(
-    "packages/pieces/community/clarifai/src",
+    `packages/pieces/community/${integration}/src`,
     "index.ts"
   );
   if (indexContent) {
@@ -71,7 +71,7 @@ async function findMultipleScripts(): Promise<Map<string, string>> {
     const { data: contents } = await octokit.rest.repos.getContent({
       owner,
       repo,
-      path: "packages/pieces/community/clarifai/src/lib/common",
+      path: `packages/pieces/community/${integration}/src/lib/common`,
     });
 
     if (Array.isArray(contents)) {
@@ -112,7 +112,7 @@ async function findClarifaiAskLLMScript(): Promise<string> {
 }
 
 async function findClarifaiScripts(): Promise<string> {
-  const scripts = await findMultipleScripts();
+  const scripts = await findMultipleScripts("clarifai");
   let output = "";
   
   for (const [filepath, content] of scripts.entries()) {
