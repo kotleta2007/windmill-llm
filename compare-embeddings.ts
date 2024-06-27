@@ -3,6 +3,7 @@ import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/index.mjs";
 import { getScripts } from "./scripts.ts"
 import { similarity } from "./tensors";
+import { result, userPrompt } from "./getContext";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -191,6 +192,8 @@ const activePiecesPath = "/home/mark/git/activepieces/packages/pieces/community/
 const activePiecesFile = Bun.file(activePiecesPath);
 const activePiecesExample: string = await activePiecesFile.text();
 
+const activePiecesCommon: string = "/home/mark/git/activepieces/packages/pieces/community/asana/src/index.ts";
+
 const messages_activepieces: ChatCompletionMessageParam[] = [
   {
     role: "system",
@@ -282,4 +285,40 @@ const sim_both = await similarity(codeEmbedding_both.data[0].embedding, groundTr
 
 console.log("Similarity between generated code and ground truth: ", sim_both)
 
+// generate using ActivePieces (using multiple scripts)
+console.log("\nGenerating using multiple scripts from ActivePieces")
+
+const messages_bis: ChatCompletionMessageParam[] = [
+  {
+    role: "system",
+    content: setCodeExample(send_post_request_question, send_post_request_code),
+  },
+  {
+    role: "user",
+    content:
+      userPrompt,
+
+  },
+];
+
+
+const response_bis = await openai.chat.completions.create({
+    messages: messages_bis,
+    model: "gpt-4o",
+    max_tokens: 1024,
+    temperature: 0,
+  });
+const content_bis: string = response_bis.choices[0].message.content;
+const match_bis = content_bis.match(/```typescript\n([\s\S]*?)\n```/);
+const code_bis = match_bis?.[1];
+
+const codeEmbedding_bis = await openai.embeddings.create({
+  model: model_type,
+  input: code_bis,
+  encoding_format: "float",
+});
+
+const sim_bis = await similarity(codeEmbedding_bis.data[0].embedding, groundTruthEmbedding.data[0].embedding);
+
+console.log("Similarity between generated code and ground truth: ", sim_bis)
 
