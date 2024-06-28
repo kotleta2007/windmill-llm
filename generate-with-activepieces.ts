@@ -4,6 +4,13 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/index.mjs
 import { getScripts } from "./scripts.ts"
 import { getAllClarifaiOutput } from "./generate-from-activepieces.ts"
 
+type Stats = {
+  modelType: string,
+  totalTokens: number,
+  promptTokens: number,
+  completionTokens: number
+}
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -87,6 +94,24 @@ try {
   console.log("Got result");
   console.log(content);
   console.log(code);
+
+  const tokenUsage = response.usage
+
+  if (tokenUsage !== undefined) {
+    // It would be nice if we had a JSON that contained:
+    // The script that was generated (the response of the model)
+    //
+    // The type of model that was used
+    // The number of Prompt + Completion tokens
+    //
+    // We use these last two parameters to estimate the cost of generation
+    console.log("Model Type", response.model)
+    console.log("Total tokens", tokenUsage.total_tokens)
+    console.log("Prompt tokens", tokenUsage.prompt_tokens)
+    console.log("Completion tokens", tokenUsage.completion_tokens)
+  } else {
+    console.log("No info about token usage.")
+  }
 } catch (err) {
   console.error(err);
 }
