@@ -125,7 +125,7 @@ async function findClarifaiScripts(): Promise<string> {
 }
 
 // Usage example:
-async function getAllClarifaiOutput(): Promise<string> {
+export async function getAllClarifaiOutput(): Promise<string> {
   const askLLMOutput = await findClarifaiAskLLMScript();
   const otherScriptsOutput = await findClarifaiScripts();
 
