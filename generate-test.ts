@@ -27,6 +27,12 @@ You have to create a single script which tests the script you are given as input
   2. All endpoints listed in the code are valid.
   3. The code accomplishes the task that is specified.
 
+The first lines of your generated testing code should contain constant definitions
+which list placeholder variables (one by line) that must be replaced for the execution of the testing script.
+In particular, list the files that you are using (like the script of the code) and the authentication tokens.
+Make sure that only replacing those variables with actual values will be sufficient for the scripts to run.
+No placeholder variables should appear in the rest of the code or the imports.
+
 Here's how interactions have to look like:
 user: {sample_question}
 assistant: \`\`\`typescript
