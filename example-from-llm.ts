@@ -60,7 +60,7 @@ export async function main(auth: ClarifaiAuth, modelId: string, prompt: string) 
 }
 
 // const auth: ClarifaiAuth = {
-//   token: "MY_TOKEN_WAS_HERE"
+//   token: process.env.CLARIFAI_TOKEN
 // };
 //
 // console.log(await main(auth, "codellama-13b-instruct", "Generate a simple Python script that computes the Nth Fibonacci number"));
