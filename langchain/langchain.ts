@@ -8,29 +8,17 @@
 
 import { ChatOpenAI } from "@langchain/openai";
 import { initializeAgentExecutorWithOptions } from "langchain/agents";
-import { DynamicTool } from "@langchain/core/tools";
+import { integrationScriptsTool } from "./octokit-activepieces-tool"
 
 const llm = new ChatOpenAI({
   model: "gpt-4o-2024-05-13",
+  maxTokens: 1024,
   temperature: 0
-});
-
-// Create a simple addition tool
-const additionTool = new DynamicTool({
-  name: "addition",
-  description: "Adds two numbers together",
-  func: async (input: string) => {
-    const [a, b] = input.split(',').map(num => parseFloat(num.trim()));
-    if (isNaN(a) || isNaN(b)) {
-      return "Please provide two valid numbers.";
-    }
-    return (a + b).toString();
-  },
 });
 
 async function setupAgent() {
   const executor = await initializeAgentExecutorWithOptions(
-    [additionTool],
+    [integrationScriptsTool],
     llm,
     {
       agentType: "openai-functions",
@@ -45,10 +33,7 @@ async function main() {
   const agent = await setupAgent();
   
   const queries = [
-    "What's 123 plus 456?",
-    "Can you add 78 and 22 for me?",
-    "What's the capital of France?",
-    "If I have 5 apples and get 3 more, how many do I have?",
+    "Generate a script that uses Clarifai and asks an LLM something",
   ];
 
   for (const query of queries) {
