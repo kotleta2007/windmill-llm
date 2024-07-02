@@ -11,6 +11,7 @@
   "dependencies": {
     "@octokit/rest": "^21.0.0",
     "@tensorflow/tfjs-node": "^4.20.0",
+    "cheerio": "^1.0.0-rc.12",
     "dotenv": "^16.4.5",
     "glob": "^10.4.2",
     "inquirer": "^9.3.1",
