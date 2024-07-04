@@ -1,4 +1,5 @@
-import { AxAI, AxAgent, AxChainOfThought, AxFunction } from '@ax-llm/ax';
+import { AxAI, AxAgent, AxChainOfThought } from '@ax-llm/ax';
+import type { AxFunction } from '@ax-llm/ax';
 import { ActivePiecesRepository } from './activePieces';
 import { TavilyAPI } from './tavily';
 import { WindmillHub } from './windmill';
@@ -96,18 +97,15 @@ const functions: AxFunction[] = [
   }
 ];
 
-// Define agents with corrected signatures
-const reviewerAgent = new AxAgent(ai, {
-  name: 'Code Reviewer',
-  description: 'Reviews generated code and tests, and coordinates the generation process.',
+// Define agents
+const testGeneratorAgent = new AxAgent(ai, {
+  name: 'Test Generator',
+  description: 'Generates and runs tests for the given code.',
   signature: `
-    integration:string,
-    task:string,
-    code:string,
-    tests:string,
-    testReport:string -> isApproved:boolean, feedback:string
+    generatedCode:string,
+    task:string -> tests:string, testReport:string
   `,
-  functions: functions.filter(f => ['searchTavily'].includes(f.name))
+  functions: functions.filter(f => ['generateAndRunTests'].includes(f.name))
 });
 
 const codeGeneratorAgent = new AxAgent(ai, {
@@ -118,35 +116,30 @@ const codeGeneratorAgent = new AxAgent(ai, {
     task:string,
     additionalInfo?:string -> generatedCode:string
   `,
-  functions: functions.filter(f => ['generateCode', 'searchActivePiecesRepo'].includes(f.name))
+  functions: functions.filter(f => ['generateCode', 'searchActivePiecesRepo'].includes(f.name)),
+  agents: [testGeneratorAgent]
 });
 
-const testGeneratorAgent = new AxAgent(ai, {
-  name: 'Test Generator',
-  description: 'Generates and runs tests for the generated code.',
-  signature: `
-    generatedCode:string,
-    task:string -> tests:string, testReport:string
-  `,
-  functions: functions.filter(f => ['generateAndRunTests'].includes(f.name))
-});
-
-// Main workflow
-const workflowAgent = new AxAgent(ai, {
-  name: 'Workflow Agent',
-  description: 'Orchestrates the entire code generation, testing, and review process',
+const reviewerAgent = new AxAgent(ai, {
+  name: 'Code Reviewer',
+  description: 'Reviews generated code and tests, and coordinates the generation process.',
   signature: `
     integration:string,
-    task:string -> code:string, tests:string, isApproved:boolean, feedback:string
+    task:string,
+    code:string,
+    tests:string -> code:string, tests:string, isApproved:boolean, feedback:string
   `,
-  functions
+  functions: functions.filter(f => ['searchTavily', 'submitToWindmill'].includes(f.name)),
+  agents: [codeGeneratorAgent]
 });
 
 // Usage
 async function main() {
-  const result = await workflowAgent.forward({
+  const result = await reviewerAgent.forward({
     integration: 'SomeService',
-    task: 'Create a script to fetch user data'
+    task: 'Create a script to fetch user data',
+    code: 'none',
+    tests: 'none',
   });
 
   console.log(result);
