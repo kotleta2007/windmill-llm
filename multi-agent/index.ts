@@ -1,27 +1,27 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
-import { StateGraph, END } from "@langchain/langgraph";
+import { StateGraph, START, END } from "@langchain/langgraph";
 import { Runnable } from "@langchain/core/runnables";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 
 // Dummy functions for external services
 const ActivePieces = {
   getRelevantScripts: (integration: string) => {
+    console.log("ACTIVE PIECES CALLED")
     return `Relevant script for ${integration}: console.log("Hello from ${integration}");`;
   }
 };
 
 const Tavily = {
   search: (query: string) => {
+    console.log("TAVILY CALLED")
     return `Additional information for ${query}: Some relevant API endpoints and usage examples.`;
   }
 };
 
 const Windmill = {
   submitToHub: (code: string, tests: string) => {
-    console.log("Submitting to Windmill Hub:");
-    console.log("Code:", code);
-    console.log("Tests:", tests);
+    console.log("SUBMITTED TO WINDMILL");
     return "Successfully submitted to Windmill Hub";
   }
 };
@@ -51,6 +51,7 @@ interface AgentState {
   task?: string;
   integration?: string;
   additionalInfo?: string;
+  submitted?: boolean;
 }
 
 // Create the graph
@@ -64,110 +65,109 @@ const workflow = new StateGraph<AgentState>({
     task: { value: (x, y) => y ?? x },
     integration: { value: (x, y) => y ?? x },
     additionalInfo: { value: (x, y) => y ?? x },
+    submitted: { value: (x, y) => y ?? x ?? false },
   }
 });
 
 // Add nodes
 workflow.addNode("Reviewer", async (state) => {
-  console.log("\n--- Reviewer Agent Start ---");
+  console.log("Reviewer Agent called");
   
-  let input: string;
-  let newState: Partial<AgentState> = { sender: "Reviewer" };
+  let newState: Partial<AgentState> = { ...state, sender: "Reviewer" };
 
   if (state.code && state.tests && state.testResults) {
-    input = `Review the following for task: ${state.task}\nCode: ${state.code}\nTests: ${state.tests}\nTest Results: ${state.testResults}\nDecide if this is ready to submit or needs more work. Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
-
-    console.log("Reviewer Input:", input);
+    const input = `Review the following for task: ${state.task}\nCode: ${state.code}\nTests: ${state.tests}\nTest Results: ${state.testResults}\nDecide if this is ready to submit or needs more work. Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
 
     const result = await reviewer.invoke({
       input: input,
     });
 
-    console.log("Reviewer Output:", result.content);
-
     if (result.content.includes("VALIDATED")) {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
-      console.log("Windmill Submission Result:", windmillResult);
-      newState.submitted = true;  // Add this line to indicate submission
-      return;
+      newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
       const tavilyResult = Tavily.search(state.task ?? "");
-      console.log("Tavily Search Result:", tavilyResult);
       newState.additionalInfo = tavilyResult;
     }
   } else {
-    // Initial task from user, just pass it on to CodeGenerator
     newState.task = state.task;
     newState.integration = state.task.split(" ")[0];
-    console.log("New Task:", newState.task);
-    console.log("Integration:", newState.integration);
   }
   
-  console.log("--- Reviewer Agent End ---\n");
   return newState;
 });
 
 workflow.addNode("CodeGenerator", async (state) => {
-  console.log("\n--- CodeGenerator Agent Start ---");
+  console.log("CodeGenerator Agent called");
+  
   const relevantScripts = ActivePieces.getRelevantScripts(state.integration ?? "");
-  console.log("Relevant Scripts:", relevantScripts);
-
   const input = `Task: ${state.task}\nRelevant scripts: ${relevantScripts}\nAdditional info: ${state.additionalInfo ?? ""}`;
-  console.log("CodeGenerator Input:", input);
 
   const result = await codeGenerator.invoke({
     input: input,
   });
 
-  console.log("Generated Code:", result.content);
-  console.log("--- CodeGenerator Agent End ---\n");
-
-  return { sender: "CodeGenerator", code: result.content };
+  return { ...state, sender: "CodeGenerator", code: result.content };
 });
 
 workflow.addNode("TestGenerator", async (state) => {
-  console.log("\n--- TestGenerator Agent Start ---");
+  console.log("TestGenerator Agent called");
+  
   const input = `Generate tests for the following code:\n${state.code}`;
-  console.log("TestGenerator Input:", input);
 
   const result = await testGenerator.invoke({
     input: input,
   });
 
-  console.log("Generated Tests:", result.content);
-  console.log("Test Results: All tests passed successfully."); // Simulated test results
-  console.log("--- TestGenerator Agent End ---\n");
-
   return { 
+    ...state,
     sender: "TestGenerator", 
     tests: result.content,
     testResults: "All tests passed successfully." // Simulated test results
   };
 });
 
-// Define edges
-workflow.addEdge("Reviewer", "CodeGenerator");
-workflow.addEdge("CodeGenerator", "TestGenerator");
-workflow.addEdge("TestGenerator", "Reviewer");
-
-workflow.addConditionalEdges(
-  "Reviewer",
-  (state) => {
-    if (state.submitted) {
-      return "end";
-    } else if (state.code && state.tests && state.testResults) {
-      return "Reviewer";
-    } else {
-      return "CodeGenerator";
-    }
-  },
-  {
-    end: END,
-    Reviewer: "Reviewer",
-    CodeGenerator: "CodeGenerator",
+// Router function
+function router(state: AgentState) {
+  if (state.submitted) {
+    console.log("WE ARE DONE");
+    return "end";
   }
-);
-workflow.setEntryPoint("Reviewer");
+  
+  if (!state.code) {
+    return "CodeGenerator";
+  }
+  
+  if (!state.tests || !state.testResults) {
+    return "TestGenerator";
+  }
+  
+  return "Reviewer";
+}
+
+// Define edges with the router
+workflow.addConditionalEdges("Reviewer", router, {
+  CodeGenerator: "CodeGenerator",
+  TestGenerator: "TestGenerator",
+  Reviewer: "Reviewer",
+  end: END,
+});
+
+workflow.addConditionalEdges("CodeGenerator", router, {
+  CodeGenerator: "CodeGenerator",
+  TestGenerator: "TestGenerator",
+  Reviewer: "Reviewer",
+  end: END,
+});
+
+workflow.addConditionalEdges("TestGenerator", router, {
+  CodeGenerator: "CodeGenerator",
+  TestGenerator: "TestGenerator",
+  Reviewer: "Reviewer",
+  end: END,
+});
+
+workflow.addEdge(START, "Reviewer");
 
 // Compile the graph
 const graph = workflow.compile();
