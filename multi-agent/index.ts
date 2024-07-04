@@ -51,8 +51,8 @@ interface AgentState {
   code?: string;
   tests?: string;
   testResults?: string;
-  task?: string;
-  integration?: string;
+  task: string;
+  integration: string;
   additionalInfo?: string;
   submitted?: boolean;
   reviewed?: boolean;
@@ -81,7 +81,7 @@ workflow.addNode("Reviewer", async (state) => {
   let newState: Partial<AgentState> = { ...state, sender: "Reviewer", reviewed: true };
 
   if (state.code && state.tests && state.testResults) {
-    const input = `Review the following for task: ${state.task}\nCode: ${state.code}\nTests: ${state.tests}\nTest Results: ${state.testResults}\nDecide if this is ready to submit or needs more work. Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
+    const input = `Review the following for integration: ${state.integration}, task: ${state.task}\nCode: ${state.code}\nTests: ${state.tests}\nTest Results: ${state.testResults}\nDecide if this is ready to submit or needs more work. Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
 
     const result = await reviewer.invoke({
       input: input,
@@ -91,7 +91,7 @@ workflow.addNode("Reviewer", async (state) => {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
       newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
-      const tavilyResult = Tavily.search(state.task ?? "");
+      const tavilyResult = Tavily.search(`${state.integration} ${state.task}`);
       newState.additionalInfo = tavilyResult;
     }
   }
@@ -102,8 +102,8 @@ workflow.addNode("Reviewer", async (state) => {
 workflow.addNode("CodeGenerator", async (state) => {
   console.log("CodeGenerator Agent called");
   
-  const relevantScripts = ActivePieces.getRelevantScripts(state.integration ?? "");
-  const input = `Task: ${state.task}\nRelevant scripts: ${relevantScripts}\nAdditional info: ${state.additionalInfo ?? ""}`;
+  const relevantScripts = ActivePieces.getRelevantScripts(state.integration);
+  const input = `Integration: ${state.integration}\nTask: ${state.task}\nRelevant scripts: ${relevantScripts}\nAdditional info: ${state.additionalInfo ?? ""}`;
 
   const result = await codeGenerator.invoke({
     input: input,
@@ -115,7 +115,7 @@ workflow.addNode("CodeGenerator", async (state) => {
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");
   
-  const input = `Generate tests for the following code:\n${state.code}`;
+  const input = `Generate tests for the following code:\nIntegration: ${state.integration}\nTask: ${state.task}\nCode:\n${state.code}`;
 
   const result = await testGenerator.invoke({
     input: input,
@@ -179,11 +179,10 @@ workflow.addEdge(START, "CodeGenerator");
 const graph = workflow.compile();
 
 // Run the graph
-async function runWorkflow(task: string) {
+async function runWorkflow(integration: string, task: string) {
   const result = await graph.invoke({
+    integration: integration,
     task: task,
-    integration: task.split(" ")[0],
-    messages: [new HumanMessage(task)]
   });
 
   console.log("Final Result:");
@@ -191,4 +190,4 @@ async function runWorkflow(task: string) {
 }
 
 // Example usage
-runWorkflow("Create a script to integrate with Twitter API for posting tweets");
+runWorkflow("clarifai", "ask-llm");
