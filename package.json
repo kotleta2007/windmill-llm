@@ -9,6 +9,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@ax-llm/ax": "^9.0.19",
     "@langchain/openai": "^0.2.1",
     "@octokit/rest": "^21.0.0",
     "@tensorflow/tfjs-node": "^4.20.0",
