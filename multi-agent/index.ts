@@ -1,5 +1,4 @@
 import { ChatGroq } from "@langchain/groq";
-import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { StateGraph, START, END } from "@langchain/langgraph";
 import { Runnable } from "@langchain/core/runnables";
@@ -56,6 +55,7 @@ interface AgentState {
   integration?: string;
   additionalInfo?: string;
   submitted?: boolean;
+  reviewed?: boolean;
 }
 
 // Create the graph
@@ -70,6 +70,7 @@ const workflow = new StateGraph<AgentState>({
     integration: { value: (x, y) => y ?? x },
     additionalInfo: { value: (x, y) => y ?? x },
     submitted: { value: (x, y) => y ?? x ?? false },
+    reviewed: { value: (x, y) => y ?? x ?? false },
   }
 });
 
@@ -77,7 +78,7 @@ const workflow = new StateGraph<AgentState>({
 workflow.addNode("Reviewer", async (state) => {
   console.log("Reviewer Agent called");
   
-  let newState: Partial<AgentState> = { ...state, sender: "Reviewer" };
+  let newState: Partial<AgentState> = { ...state, sender: "Reviewer", reviewed: true };
 
   if (state.code && state.tests && state.testResults) {
     const input = `Review the following for task: ${state.task}\nCode: ${state.code}\nTests: ${state.tests}\nTest Results: ${state.testResults}\nDecide if this is ready to submit or needs more work. Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
@@ -93,9 +94,6 @@ workflow.addNode("Reviewer", async (state) => {
       const tavilyResult = Tavily.search(state.task ?? "");
       newState.additionalInfo = tavilyResult;
     }
-  } else {
-    newState.task = state.task;
-    newState.integration = state.task.split(" ")[0];
   }
   
   return newState;
@@ -146,7 +144,11 @@ function router(state: AgentState) {
     return "TestGenerator";
   }
   
-  return "Reviewer";
+  if (!state.reviewed) {
+    return "Reviewer";
+  }
+  
+  return "CodeGenerator";
 }
 
 // Define edges with the router
@@ -171,7 +173,7 @@ workflow.addConditionalEdges("TestGenerator", router, {
   end: END,
 });
 
-workflow.addEdge(START, "Reviewer");
+workflow.addEdge(START, "CodeGenerator");
 
 // Compile the graph
 const graph = workflow.compile();
@@ -180,6 +182,7 @@ const graph = workflow.compile();
 async function runWorkflow(task: string) {
   const result = await graph.invoke({
     task: task,
+    integration: task.split(" ")[0],
     messages: [new HumanMessage(task)]
   });
 
