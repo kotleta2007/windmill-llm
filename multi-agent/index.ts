@@ -1,3 +1,4 @@
+import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { StateGraph, START, END } from "@langchain/langgraph";
@@ -28,7 +29,10 @@ const Windmill = {
 
 // Agent creation helper
 async function createAgent(name: string, systemMessage: string): Promise<Runnable> {
-  const llm = new ChatOpenAI({ modelName: "gpt-4o" });
+  const llm = new ChatGroq({
+    modelName: "llama3-70b-8192",
+    temperature: 0.,
+  });
   const prompt = ChatPromptTemplate.fromMessages([
     ["system", systemMessage],
     ["human", "{input}"],
