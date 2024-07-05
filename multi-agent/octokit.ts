@@ -98,7 +98,7 @@ async function findMultipleScripts(integration: string): Promise<Map<string, str
   return results;
 }
 
-export async function getIntegrationOutput(integration: string, task: string): Promise<string> {
+export async function getActivePiecesScripts(integration: string, task: string): Promise<string> {
   let output = "";
 
   // Find the specific task script
@@ -129,7 +129,7 @@ export async function getIntegrationOutput(integration: string, task: string): P
 
 // Usage example:
 async function main() {
-  const output = await getIntegrationOutput("clarifai", "ask-llm");
+  const output = await getActivePiecesScripts("clarifai", "ask-llm");
   console.log(output);
 }
 
