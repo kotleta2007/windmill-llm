@@ -5,6 +5,11 @@ import { StateGraph, START, END } from "@langchain/langgraph";
 import { Runnable } from "@langchain/core/runnables";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { codeGeneratorSystemPrompt, codeGeneratorUserPrompt, exampleWindmillScript } from "./prompts";
+import { getIntegrationOutput } from "./octokit";
+
+// Model type
+const modelType = "gpt-4o";
 
 // Dummy functions for external services
 const ActivePieces = {
@@ -24,6 +29,10 @@ const Tavily = {
 const Windmill = {
   submitToHub: (code: string, tests: string) => {
     console.log("SUBMITTED TO WINDMILL");
+    // console.log("Here is the code")
+    // console.log(code)
+    // console.log("Here are the tests")
+    // console.log(tests)
     return "Successfully submitted to Windmill Hub";
   }
 };
@@ -32,22 +41,36 @@ const Windmill = {
 async function createAgent(name: string, systemMessage: string, modelType: string): Promise<Runnable> {
   let llm: BaseChatModel;
 
-  switch (modelType.toLowerCase()) {
-    case "groq":
-    case "llama3":
+  switch (modelType) {
+    case "gpt-3.5-turbo":
+    case "gpt-3.5-turbo-16k":
+    case "gpt-4":
+    case "gpt-4-turbo":
+    case "gpt-4-turbo-2024-04-09":
+    case "gpt-4o":
+    case "gpt-4o-2024-05-13":
+      llm = new ChatOpenAI({
+        modelName: modelType,
+        temperature: 0,
+      });
+      break;
+    case "llama3-8b-8192":
+    case "llama3-70b-8192":
+    case "mixtral-8x7b-32768":
+    case "gemma-7b-it":
+    case "gemma2-9b-it":
+      llm = new ChatGroq({
+        modelName: modelType,
+        temperature: 0,
+      });
+      break;
+    default:
       llm = new ChatGroq({
         modelName: "llama3-70b-8192",
         temperature: 0,
       });
       break;
-    case "gpt4":
-    case "openai":
-    default:
-      llm = new ChatOpenAI({
-        modelName: "gpt-4o",
-        temperature: 0,
-      });
-      break;
+
   }
 
   const prompt = ChatPromptTemplate.fromMessages([
@@ -59,9 +82,10 @@ async function createAgent(name: string, systemMessage: string, modelType: strin
 }
 
 // Create agents
-const reviewer = await createAgent("Reviewer", "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.", "groq");
-const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
-const testGenerator = await createAgent("TestGenerator", "You are a test generator. You create and run tests for given code.", "groq");
+const reviewer = await createAgent("Reviewer", "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.", modelType);
+// const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
+const codeGenerator = await createAgent("CodeGenerator", codeGeneratorSystemPrompt, modelType);
+const testGenerator = await createAgent("TestGenerator", "You are a test generator. You create and run tests for given code.", modelType);
 
 // Define state
 interface AgentState {
@@ -121,13 +145,20 @@ workflow.addNode("Reviewer", async (state) => {
 workflow.addNode("CodeGenerator", async (state) => {
   console.log("CodeGenerator Agent called");
   
-  const relevantScripts = ActivePieces.getRelevantScripts(state.integration);
-  // const relevantScripts = ...;
-  const input = `Integration: ${state.integration}\nTask: ${state.task}\nRelevant scripts: ${relevantScripts}\nAdditional info: ${state.additionalInfo ?? ""}`;
+  // const relevantScripts = ActivePieces.getRelevantScripts(state.integration);
+  // const input = `Integration: ${state.integration}\nTask: ${state.task}\nRelevant scripts: ${relevantScripts}\nAdditional info: ${state.additionalInfo ?? ""}`;
+  const input = 
+    codeGeneratorUserPrompt
+    .replace("{integration}", state.integration)
+    .replace("{task}", state.task)
+    .replace("{example}", exampleWindmillScript)
+    .replace("{activePiecesPrompt}", await getIntegrationOutput(state.integration, state.task))
 
   const result = await codeGenerator.invoke({
     input: input,
   });
+  // const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
+  // const code = match?.[1];
 
   return { ...state, sender: "CodeGenerator", code: result.content };
 });
