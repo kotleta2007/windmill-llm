@@ -1,8 +1,10 @@
 import { ChatGroq } from "@langchain/groq";
+import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
 import { StateGraph, START, END } from "@langchain/langgraph";
 import { Runnable } from "@langchain/core/runnables";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 // Dummy functions for external services
 const ActivePieces = {
@@ -27,22 +29,39 @@ const Windmill = {
 };
 
 // Agent creation helper
-async function createAgent(name: string, systemMessage: string): Promise<Runnable> {
-  const llm = new ChatGroq({
-    modelName: "llama3-70b-8192",
-    temperature: 0.,
-  });
+async function createAgent(name: string, systemMessage: string, modelType: string): Promise<Runnable> {
+  let llm: BaseChatModel;
+
+  switch (modelType.toLowerCase()) {
+    case "groq":
+    case "llama3":
+      llm = new ChatGroq({
+        modelName: "llama3-70b-8192",
+        temperature: 0,
+      });
+      break;
+    case "gpt4":
+    case "openai":
+    default:
+      llm = new ChatOpenAI({
+        modelName: "gpt-4o",
+        temperature: 0,
+      });
+      break;
+  }
+
   const prompt = ChatPromptTemplate.fromMessages([
     ["system", systemMessage],
     ["human", "{input}"],
   ]);
+
   return prompt.pipe(llm);
 }
 
 // Create agents
-const reviewer = await createAgent("Reviewer", "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.");
-const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.");
-const testGenerator = await createAgent("TestGenerator", "You are a test generator. You create and run tests for given code.");
+const reviewer = await createAgent("Reviewer", "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.", "groq");
+const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
+const testGenerator = await createAgent("TestGenerator", "You are a test generator. You create and run tests for given code.", "groq");
 
 // Define state
 interface AgentState {
@@ -103,6 +122,7 @@ workflow.addNode("CodeGenerator", async (state) => {
   console.log("CodeGenerator Agent called");
   
   const relevantScripts = ActivePieces.getRelevantScripts(state.integration);
+  // const relevantScripts = ...;
   const input = `Integration: ${state.integration}\nTask: ${state.task}\nRelevant scripts: ${relevantScripts}\nAdditional info: ${state.additionalInfo ?? ""}`;
 
   const result = await codeGenerator.invoke({
