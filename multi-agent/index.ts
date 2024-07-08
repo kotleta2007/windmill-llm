@@ -8,6 +8,8 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { codeGeneratorSystemPrompt, codeGeneratorUserPrompt, exampleWindmillScript, testGeneratorSystemPrompt, testGeneratorUserPrompt } from "./prompts";
 import { getActivePiecesScripts} from "./octokit";
 import { getEnvVariableNames, getDependencies } from "./read-local";
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 // Model type
 const modelType = "gpt-4o";
@@ -155,6 +157,15 @@ workflow.addNode("CodeGenerator", async (state) => {
   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
   const code = match?.[1] || '';
 
+  // Write the code to a local file
+  try {
+    const filePath = path.join(process.cwd(), 'generated-code.ts');
+    await fs.writeFile(filePath, code, 'utf8');
+    console.log(`Generated code has been written to ${filePath}`);
+  } catch (error) {
+    console.error('Error writing generated code to file:', error);
+  }
+
   return { ...state, sender: "CodeGenerator", code: code };
 });
 
@@ -177,6 +188,15 @@ workflow.addNode("TestGenerator", async (state) => {
 
   console.log(input)
   console.log(result.content)
+
+  // Write the tests to a local file
+  try {
+    const filePath = path.join(process.cwd(), 'generated-tests.ts');
+    await fs.writeFile(filePath, tests, 'utf8');
+    console.log(`Generated tests have been written to ${filePath}`);
+  } catch (error) {
+    console.error('Error writing generated tests to file:', error);
+  }
 
   await new Promise(f => setTimeout(f, 1000));
 
