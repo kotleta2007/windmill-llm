@@ -206,7 +206,7 @@ workflow.addNode("TestGenerator", async (state) => {
   // Execute static tests
   let staticTestResults: string;
   try {
-    staticTestResults = staticTests();
+    staticTestResults = staticTests('generated-code.ts');
   } catch (error) {
     staticTestResults = `Error running static tests: ${error}`;
   }
