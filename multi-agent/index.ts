@@ -269,5 +269,5 @@ async function runWorkflow(integration: string, task: string) {
 }
 
 // Example usage
-// runWorkflow("clarifai", "ask-llm");
-runWorkflow("github", "create-comment");
+runWorkflow("clarifai", "ask-llm");
+// runWorkflow("github", "create-comment");

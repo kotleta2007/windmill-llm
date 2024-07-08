@@ -47,10 +47,8 @@ You can find the necessary endpoints/logic in here:
 `;
 
 export const testGeneratorSystemPrompt = `
-You have to create a single script which tests the script you are given as input. Create a sequence of tests that verify that:
-  1. The code contains valid TypeScript.    
-  2. All endpoints listed in the code are valid.
-  3. The code accomplishes the task that is specified.
+You have to create a single script which tests the script you are given as input. 
+Create a test that verifies that the code accomplishes the task that is specified.
 
 You have access to the following environment variables, containing credentials for external services:
 {envVariables}
@@ -59,8 +57,10 @@ You also have the following dependencies installed:
 
 No other libraries / testing frameworks are available from the ones listed above (you are free to call the TypeScript standard library / Bun facilities).
 
-Complete the rest of the parameters of the code to your liking.
+The parameters should be valid. The code should run. If you can't find appropriate values, you will set readyToTest to false.
 The parameters should closely resemble the parameters a potential Windmill user might use.
+
+If you can't verify that the script is runnable with the parameters you have set, you will set readyToTest to false.
 
 The generated code can be found in 'generated-code.ts' in the current working directory.
 Don't set any placeholder name for the script to run.
@@ -68,11 +68,51 @@ Don't set any placeholder name for the script to run.
 Leave no placeholder variables. The script will be called immediately with environment variables or the parameters you specified.
 Make sure you are using the Bun runtime.
 
-If you are unable to return a standalone script that can be run in this environment,
-or if your script contains placeholder variables that have to be replaced with real values,
+If this test contains a comment that contains the following words: "replace with valid"
+If this test contains a variable set to 'mock-...'
+If this test contains a variable whose value the user will have to replace (non-existent resource)
+, say the following line:
+readyToTest: false
+
+Here's how interactions have to look like:
+user: [sample_question]
+assistant: \`\`\`typescript
+[code]
+\`\`\`
+readyToTest: [true/false]
+`;
+
+export const prevTestGeneratorSystemPrompt = `
+You have to create a single script which tests the script you are given as input. 
+Create a test that verifies that the code accomplishes the task that is specified.
+
+You have access to the following environment variables, containing credentials for external services:
+{envVariables}
+You also have the following dependencies installed:
+{dependencies}
+
+No other libraries / testing frameworks are available from the ones listed above (you are free to call the TypeScript standard library / Bun facilities).
+
+The parameters should be valid. The code should run. If you can't find appropriate values, you will set readyToTest to false.
+The parameters should closely resemble the parameters a potential Windmill user might use.
+
+If you can't verify that the script is runnable with the parameters you have set, you will set readyToTest to false.
+
+The generated code can be found in 'generated-code.ts' in the current working directory.
+Don't set any placeholder name for the script to run.
+
+Leave no placeholder variables. The script will be called immediately with environment variables or the parameters you specified.
+Make sure you are using the Bun runtime.
+
+If you are unable to return a standalone script that can be run in this environment (Bun),
+or if your test contains placeholder variables that have to be replaced with real values,
+or if the test contains variables whose values contain resources that may fail at runtime (e.g. accessing non-existent resources),
+or if the test contains a value that should be "replaced if necessary", 
+or if your code contains comments that say "replace with a valid one if necessary"
 the end of your output should be:
 readyToTest: false
-If the script can be run with the given environment variables and the given dependencies, the end of your output should be:
+
+If the script can be run with the given environment variables and the given dependencies and does not contain variable values that may fail at runtime or have to be potentially replaced by the user, and you can provide a recent code example where the variables were set to these values, the end of your output should be:
 readyToTest: true
 
 Here's how interactions have to look like:
