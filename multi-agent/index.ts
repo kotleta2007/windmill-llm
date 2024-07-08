@@ -7,6 +7,7 @@ import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { codeGeneratorSystemPrompt, codeGeneratorUserPrompt, exampleWindmillScript, testGeneratorSystemPrompt, testGeneratorUserPrompt } from "./prompts";
 import { getActivePiecesScripts} from "./octokit";
+import { getEnvVariableNames, getDependencies } from "./read-local";
 
 // Model type
 const modelType = "gpt-4o";
@@ -77,7 +78,11 @@ async function createAgent(name: string, systemMessage: string, modelType: strin
 const reviewer = await createAgent("Reviewer", "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.", modelType);
 // const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
 const codeGenerator = await createAgent("CodeGenerator", codeGeneratorSystemPrompt, modelType);
-const testGenerator = await createAgent("TestGenerator", testGeneratorSystemPrompt, modelType);
+const testGenerator = await createAgent("TestGenerator", 
+                                        testGeneratorSystemPrompt
+                                          .replace("{envVariables}", getEnvVariableNames())
+                                          .replace("{dependencies}", getDependencies()),
+                                        modelType);
 
 // Define state
 interface AgentState {
@@ -147,25 +152,28 @@ workflow.addNode("CodeGenerator", async (state) => {
   const result = await codeGenerator.invoke({
     input: input,
   });
-  // const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
-  // const code = match?.[1];
+  const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
+  const code = match?.[1] || '';
 
-  return { ...state, sender: "CodeGenerator", code: result.content };
+  return { ...state, sender: "CodeGenerator", code: code };
 });
+
 
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");
   
-  // const input = `Generate tests for the following code:\nIntegration: ${state.integration}\nTask: ${state.task}\nCode:\n${state.code}`;
   const input = 
     testGeneratorUserPrompt
     .replace("{task}", state.task)
     .replace("{integration}", state.integration)
-    .replace("{generatedCode}", state.code)
+    .replace("{generatedCode}", state.code!)
 
   const result = await testGenerator.invoke({
     input: input,
   });
+
+  const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
+  const tests = match?.[1] || '';
 
   console.log(input)
   console.log(result.content)
@@ -175,7 +183,7 @@ workflow.addNode("TestGenerator", async (state) => {
   return { 
     ...state,
     sender: "TestGenerator", 
-    tests: result.content,
+    tests: tests,
     testResults: "All tests passed successfully." // Simulated test results
   };
 });
@@ -241,4 +249,5 @@ async function runWorkflow(integration: string, task: string) {
 }
 
 // Example usage
-runWorkflow("clarifai", "ask-llm");
+// runWorkflow("clarifai", "ask-llm");
+runWorkflow("github", "create-comment");

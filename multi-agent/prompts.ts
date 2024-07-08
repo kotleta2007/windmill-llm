@@ -48,6 +48,43 @@ You can find the necessary endpoints/logic in here:
 
 export const testGeneratorSystemPrompt = `
 You have to create a single script which tests the script you are given as input. Create a sequence of tests that verify that:
+  1. The code contains valid TypeScript.    
+  2. All endpoints listed in the code are valid.
+  3. The code accomplishes the task that is specified.
+
+You have access to the following environment variables, containing credentials for external services:
+{envVariables}
+You also have the following dependencies installed:
+{dependencies}
+
+No other libraries / testing frameworks are available from the ones listed above (you are free to call the TypeScript standard library / Bun facilities).
+
+Complete the rest of the parameters of the code to your liking.
+The parameters should closely resemble the parameters a potential Windmill user might use.
+
+The generated code can be found in 'generated-code.ts' in the current working directory.
+Don't set any placeholder name for the script to run.
+
+Leave no placeholder variables. The script will be called immediately with environment variables or the parameters you specified.
+Make sure you are using the Bun runtime.
+
+If you are unable to return a standalone script that can be run in this environment,
+or if your script contains placeholder variables that have to be replaced with real values,
+the end of your output should be:
+readyToTest: false
+If the script can be run with the given environment variables and the given dependencies, the end of your output should be:
+readyToTest: true
+
+Here's how interactions have to look like:
+user: [sample_question]
+assistant: \`\`\`typescript
+[code]
+\`\`\`
+readyToTest: [true/false]
+`;
+
+export const oldTestGeneratorSystemPrompt = `
+You have to create a single script which tests the script you are given as input. Create a sequence of tests that verify that:
   1. The code contains valid TypeScript.
   2. All endpoints listed in the code are valid.
   3. The code accomplishes the task that is specified.
@@ -67,5 +104,5 @@ assistant: \`\`\`typescript
 export const testGeneratorUserPrompt = `
 Generate a test for a script that does {task} in {integration}.
 Here is the code we will be testing:
-{generatedCode}.
+{generatedCode}
 `;
