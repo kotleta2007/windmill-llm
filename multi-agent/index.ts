@@ -10,6 +10,8 @@ import { getActivePiecesScripts} from "./octokit";
 import { getEnvVariableNames, getDependencies } from "./read-local";
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execSync } from 'child_process';
+import { staticTests } from './staticTests';
 
 // Model type
 const modelType = "gpt-4o";
@@ -107,6 +109,8 @@ const workflow = new StateGraph<AgentState>({
     sender: { value: (x, y) => y ?? x ?? "user" },
     code: { value: (x, y) => y ?? x },
     tests: { value: (x, y) => y ?? x },
+    staticTestResults: { value: (x, y) => y ?? x },
+    genTestResults: { value: (x, y) => y ?? x },
     testResults: { value: (x, y) => y ?? x },
     task: { value: (x, y) => y ?? x },
     integration: { value: (x, y) => y ?? x },
@@ -169,7 +173,6 @@ workflow.addNode("CodeGenerator", async (state) => {
   return { ...state, sender: "CodeGenerator", code: code };
 });
 
-
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");
   
@@ -200,13 +203,68 @@ workflow.addNode("TestGenerator", async (state) => {
 
   await new Promise(f => setTimeout(f, 1000));
 
+  // Execute static tests
+  let staticTestResults: string;
+  try {
+    staticTestResults = staticTests();
+  } catch (error) {
+    staticTestResults = `Error running static tests: ${error}`;
+  }
+
+  // Execute generated tests
+  let genTestResults: string;
+  try {
+    genTestResults = execSync('bun run generated-tests.ts', { encoding: 'utf8' });
+  } catch (error) {
+    genTestResults = `Error running generated tests: ${error}`;
+  }
+
   return { 
     ...state,
     sender: "TestGenerator", 
     tests: tests,
-    testResults: "All tests passed successfully." // Simulated test results
+    staticTestResults: staticTestResults,
+    genTestResults: genTestResults,
+    testResults: "All tests executed. Check staticTestResults and genTestResults for details."
   };
 });
+// workflow.addNode("TestGenerator", async (state) => {
+//   console.log("TestGenerator Agent called");
+//   
+//   const input = 
+//     testGeneratorUserPrompt
+//     .replace("{task}", state.task)
+//     .replace("{integration}", state.integration)
+//     .replace("{generatedCode}", state.code!)
+//
+//   const result = await testGenerator.invoke({
+//     input: input,
+//   });
+//
+//   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
+//   const tests = match?.[1] || '';
+//
+//   console.log(input)
+//   console.log(result.content)
+//
+//   // Write the tests to a local file
+//   try {
+//     const filePath = path.join(process.cwd(), 'generated-tests.ts');
+//     await fs.writeFile(filePath, tests, 'utf8');
+//     console.log(`Generated tests have been written to ${filePath}`);
+//   } catch (error) {
+//     console.error('Error writing generated tests to file:', error);
+//   }
+//
+//   await new Promise(f => setTimeout(f, 1000));
+//
+//   return { 
+//     ...state,
+//     sender: "TestGenerator", 
+//     tests: tests,
+//     testResults: "All tests passed successfully." // Simulated test results
+//   };
+// });
 
 // Router function
 function router(state: AgentState) {
