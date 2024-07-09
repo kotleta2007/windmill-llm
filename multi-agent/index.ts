@@ -164,7 +164,7 @@ workflow.addNode("Reviewer", async (state) => {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
       newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
-      const tavilyResult = Tavily.search(`${state.integration} ${state.task}`);
+      const tavilyResult = await Tavily.search(`${state.integration} ${state.task}`);
       newState.additionalInfo = tavilyResult;
 
       // Reset the state values
@@ -432,6 +432,11 @@ async function runWorkflow(integration: string, task: string) {
 }
 
 // Example usage
-runWorkflow("clarifai", "ask-llm");
+// runWorkflow("claude", "send-prompt");
 // runWorkflow("github", "create-comment");
+//
+// runWorkflow("clarifai", "ask-llm");
 // runWorkflow("binance", "fetch-pair-price");
+// runWorkflow("deepl", "translate-text");
+// runWorkflow("hackernews", "top-stories-in-hackernews");
+runWorkflow("straico", "prompt-completion");
