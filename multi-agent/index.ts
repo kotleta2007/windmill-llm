@@ -143,12 +143,23 @@ workflow.addNode("Reviewer", async (state) => {
       input: input,
     });
 
+    // console.log(result.content);
+
     if (result.content.includes("VALIDATED")) {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
       newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
       const tavilyResult = Tavily.search(`${state.integration} ${state.task}`);
       newState.additionalInfo = tavilyResult;
+
+      // Reset the state values
+      newState.code = undefined;
+      newState.tests = undefined;
+      newState.staticTestResults = undefined;
+      newState.genTestResults = undefined;
+      newState.testResults = undefined;
+      newState.submitted = false;
+      newState.reviewed = true;
     }
   }
   
@@ -157,6 +168,23 @@ workflow.addNode("Reviewer", async (state) => {
 
 workflow.addNode("CodeGenerator", async (state) => {
   console.log("CodeGenerator Agent called");
+  
+  // // Iterate over the properties of the state object
+  // console.log("State Before:");
+  // for (const [key, value] of Object.entries(state)) {
+  //   // For simple values, print directly
+  //   if (typeof value !== 'object' || value === null) {
+  //     console.log(`${key}: ${value}`);
+  //   } else if (Array.isArray(value)) {
+  //     // For arrays, print the length and the first few elements
+  //     console.log(`${key}: Array of length ${value.length}`);
+  //     console.log(`First few elements: ${JSON.stringify(value.slice(0, 3))}`);
+  //   } else {
+  //     // For objects, print a stringified version (limited to 100 characters)
+  //     const stringValue = JSON.stringify(value).slice(0, 100);
+  //     console.log(`${key}: ${stringValue}${stringValue.length >= 100 ? '...' : ''}`);
+  //   }
+  // }
   
   const input = 
     codeGeneratorUserPrompt
@@ -180,6 +208,24 @@ workflow.addNode("CodeGenerator", async (state) => {
     console.error('Error writing generated code to file:', error);
   }
 
+  // // Iterate over the properties of the state object
+  // console.log("State After:");
+  // for (const [key, value] of Object.entries(state)) {
+  //   // For simple values, print directly
+  //   if (typeof value !== 'object' || value === null) {
+  //     console.log(`${key}: ${value}`);
+  //   } else if (Array.isArray(value)) {
+  //     // For arrays, print the length and the first few elements
+  //     console.log(`${key}: Array of length ${value.length}`);
+  //     console.log(`First few elements: ${JSON.stringify(value.slice(0, 3))}`);
+  //   } else {
+  //     // For objects, print a stringified version (limited to 100 characters)
+  //     const stringValue = JSON.stringify(value).slice(0, 100);
+  //     console.log(`${key}: ${stringValue}${stringValue.length >= 100 ? '...' : ''}`);
+  //   }
+  // }
+ 
+
   return { ...state, sender: "CodeGenerator", code: code };
 });
 
@@ -199,8 +245,8 @@ workflow.addNode("TestGenerator", async (state) => {
   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
   const tests = match?.[1] || '';
 
-  console.log(input)
-  console.log(result.content)
+  // console.log(input)
+  // console.log(result.content)
 
   // Write the tests to a local file
   try {
@@ -282,21 +328,40 @@ function router(state: AgentState) {
     console.log("WE ARE DONE");
     return "end";
   }
-  
-  if (!state.code) {
-    return "CodeGenerator";
+
+  switch (state.sender) {
+    case "CodeGenerator":
+      return "TestGenerator";
+    case "TestGenerator":
+      return "Reviewer";
+    case "Reviewer":
+      return "CodeGenerator";
+    default:
+      // If no sender is set (initial state) or unknown sender, start with CodeGenerator
+      return "CodeGenerator";
   }
-  
-  if (!state.tests || !state.testResults) {
-    return "TestGenerator";
-  }
-  
-  if (!state.reviewed) {
-    return "Reviewer";
-  }
-  
-  return "CodeGenerator";
 }
+
+// function router(state: AgentState) {
+//   if (state.submitted) {
+//     console.log("WE ARE DONE");
+//     return "end";
+//   }
+//   
+//   if (!state.code) {
+//     return "CodeGenerator";
+//   }
+//   
+//   if (!state.tests || !state.testResults || !state.staticTestResults || !state.genTestResults) {
+//     return "TestGenerator";
+//   }
+//   
+//   if (!state.reviewed) {
+//     return "Reviewer";
+//   }
+//   
+//   return "CodeGenerator";
+// }
 
 // Define edges with the router
 workflow.addConditionalEdges("Reviewer", router, {
