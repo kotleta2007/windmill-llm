@@ -145,4 +145,7 @@ export const testGeneratorUserPrompt = `
 Generate a test for a script that does {task} in {integration}.
 Here is the code we will be testing:
 {generatedCode}
+
+You can find the necessary endpoints/logic in here: 
+{activePiecesPrompt}
 `;

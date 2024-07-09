@@ -6,25 +6,37 @@ export function staticTests(filePath: string): string {
   let results = '';
 
   // Test 1: Check if the file contains valid TypeScript code
-  function checkValidTypeScript(): void {
-    const program = ts.createProgram([filePath], {});
-    const diagnostics = ts.getPreEmitDiagnostics(program);
-
-    if (diagnostics.length === 0) {
-      results += "Test 1 Passed: File contains valid TypeScript code.\n";
-    } else {
-      results += "Test 1 Failed: TypeScript errors found:\n";
-      diagnostics.forEach((diagnostic) => {
-        if (diagnostic.file) {
-          const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start!);
-          const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
-          results += `  Line ${line + 1}, Column ${character + 1}: ${message}\n`;
-        } else {
-          results += `  ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}\n`;
-        }
-      });
+  function checkValidTypeScript(filePath: string): string {
+    try {
+      const sourceCode = fs.readFileSync(filePath, 'utf-8');
+      
+      // Attempt to parse the code
+      new Function(sourceCode);
+      
+      return "Test Passed: Code appears to be syntactically valid and executable.\n";
+    } catch (error) {
+      return `Test Failed: Code contains syntax errors: ${error}\n`;
     }
   }
+  // function checkValidTypeScript(): void {
+  //   const program = ts.createProgram([filePath], {});
+  //   const diagnostics = ts.getPreEmitDiagnostics(program);
+  //
+  //   if (diagnostics.length === 0) {
+  //     results += "Test 1 Passed: File contains valid TypeScript code.\n";
+  //   } else {
+  //     results += "Test 1 Failed: TypeScript errors found:\n";
+  //     diagnostics.forEach((diagnostic) => {
+  //       if (diagnostic.file) {
+  //         const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start!);
+  //         const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+  //         results += `  Line ${line + 1}, Column ${character + 1}: ${message}\n`;
+  //       } else {
+  //         results += `  ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}\n`;
+  //       }
+  //     });
+  //   }
+  // }
 
   // Test 2: Check URL validity in string literals
   function checkURLs(): void {

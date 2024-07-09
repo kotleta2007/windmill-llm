@@ -237,6 +237,7 @@ workflow.addNode("TestGenerator", async (state) => {
     .replace("{task}", state.task)
     .replace("{integration}", state.integration)
     .replace("{generatedCode}", state.code!)
+    .replace("{activePiecesPrompt}", await getActivePiecesScripts(state.integration, state.task))
 
   const result = await testGenerator.invoke({
     input: input,
@@ -274,6 +275,11 @@ workflow.addNode("TestGenerator", async (state) => {
   } catch (error) {
     genTestResults = `Error running generated tests: ${error}`;
   }
+
+  // console.log("Static test results")
+  // console.log(staticTestResults)
+  // console.log("Generated test results")
+  // console.log(genTestResults)
 
   return { 
     ...state,
