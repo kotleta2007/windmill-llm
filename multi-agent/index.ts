@@ -95,6 +95,8 @@ interface AgentState {
   code?: string;
   tests?: string;
   testResults?: string;
+  staticTestResults?: string;
+  genTestResults?: string;
   task: string;
   integration: string;
   additionalInfo?: string;
@@ -127,7 +129,15 @@ workflow.addNode("Reviewer", async (state) => {
   let newState: Partial<AgentState> = { ...state, sender: "Reviewer", reviewed: true };
 
   if (state.code && state.tests && state.testResults) {
-    const input = `Review the following for integration: ${state.integration}, task: ${state.task}\nCode: ${state.code}\nTests: ${state.tests}\nTest Results: ${state.testResults}\nDecide if this is ready to submit or needs more work. Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
+    const input = `
+      Review the following for integration: ${state.integration}, task: ${state.task}\n
+      Code: ${state.code}\n
+      Tests: ${state.tests}\n
+      Test Results: ${state.testResults}\n
+      Static Test Results: ${state.staticTestResults}\n
+      Generated Test Results: ${state.genTestResults}\n
+      Decide if this is ready to submit or needs more work. 
+      Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
 
     const result = await reviewer.invoke({
       input: input,
