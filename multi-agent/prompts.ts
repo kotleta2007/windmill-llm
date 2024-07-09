@@ -28,6 +28,7 @@ You have to create a single script which performs just the asked action in types
 Return the action result.
 You should use fetch and are not allowed to import any libraries.
 Define a type which contains the authentication information and only that.
+If you don't need any authentication, don't define a type!
 Handle errors.
 
 Here's how interactions have to look like:

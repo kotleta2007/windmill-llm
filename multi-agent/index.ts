@@ -10,19 +10,34 @@ import { getActivePiecesScripts} from "./octokit";
 import { getEnvVariableNames, getDependencies } from "./read-local";
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { staticTests } from './staticTests';
+import { TavilySearchAPIRetriever } from "@langchain/community/retrievers/tavily_search_api";
 
 // Model type
 const modelType = "gpt-4o";
 
 // Dummy functions for external services
 const Tavily = {
-  search: (query: string) => {
-    console.log("TAVILY CALLED")
-    return `Additional information for ${query}: Some relevant API endpoints and usage examples.`;
+  retriever: new TavilySearchAPIRetriever({ k: 3 }),
+
+  search: async function(query: string) {
+    console.log("TAVILY CALLED");
+    try {
+      const retrievedDocs = await this.retriever.invoke(query);
+      console.log({ retrievedDocs });
+      
+      // Process the retrieved documents to extract relevant information
+      const relevantInfo = retrievedDocs.map(doc => doc.pageContent).join("\n");
+      
+      return `Additional information for ${query}: ${relevantInfo}`;
+    } catch (error) {
+      console.error("Error calling Tavily:", error);
+      return `Error retrieving additional information for ${query}: ${error.message}`;
+    }
   }
 };
+
 
 const Windmill = {
   submitToHub: (code: string, tests: string) => {
@@ -263,7 +278,7 @@ workflow.addNode("TestGenerator", async (state) => {
   // Execute static tests
   let staticTestResults: string;
   try {
-    staticTestResults = staticTests('generated-code.ts');
+    staticTestResults = await staticTests('generated-code.ts');
   } catch (error) {
     staticTestResults = `Error running static tests: ${error}`;
   }
@@ -271,9 +286,18 @@ workflow.addNode("TestGenerator", async (state) => {
   // Execute generated tests
   let genTestResults: string;
   try {
-    genTestResults = execSync('bun run generated-tests.ts', { encoding: 'utf8' });
+    const result = spawnSync('bun', ['run', 'generated-tests.ts'], {
+      encoding: 'utf8',
+      stdio: 'pipe'
+    });
+
+    genTestResults = `stdout: ${result.stdout}\nstderr: ${result.stderr}`;
+
+    if (result.status !== 0) {
+      genTestResults += `\nProcess exited with status ${result.status}`;
+    }
   } catch (error) {
-    genTestResults = `Error running generated tests: ${error}`;
+    genTestResults = `Error running generated tests: ${error}\nstdout: \nstderr: ${error.message || ''}`;
   }
 
   // console.log("Static test results")
@@ -410,3 +434,4 @@ async function runWorkflow(integration: string, task: string) {
 // Example usage
 runWorkflow("clarifai", "ask-llm");
 // runWorkflow("github", "create-comment");
+// runWorkflow("binance", "fetch-pair-price");
