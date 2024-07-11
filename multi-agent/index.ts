@@ -425,6 +425,9 @@ async function runWorkflow(integration: string, task: string) {
   const result = await graph.invoke({
     integration: integration,
     task: task,
+  },
+  {
+    recursionLimit: 10,
   });
 
   console.log("Final Result:");
