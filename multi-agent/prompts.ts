@@ -36,19 +36,19 @@ user: [sample_question]
 assistant: \`\`\`typescript
 [code]
 \`\`\`
-Check that the returned code adheres to this format. 
+Check that the returned code adheres to this format.
 `;
 
 export const codeGeneratorUserPrompt = `
 Generate a standalone script that does {task} in {integration}.
-Your code should look like this: 
+Your code should look like this:
 {example}.
-You can find the necessary endpoints/logic in here: 
+You can find the necessary endpoints/logic in here:
 {activePiecesPrompt}.
 `;
 
 export const testGeneratorSystemPrompt = `
-You have to create a single script which tests the script you are given as input. 
+You have to create a single script which tests the script you are given as input.
 Create a test that verifies that the code accomplishes the task that is specified.
 
 You have access to the following environment variables, containing credentials for external services:
@@ -69,6 +69,11 @@ Don't set any placeholder name for the script to run.
 Leave no placeholder variables. The script will be called immediately with environment variables or the parameters you specified.
 Make sure you are using the Bun runtime.
 
+If the test requires access to a resource, don't set a placeholder variable.
+See if you can use the API to create the necessary resource yourself.
+This code has to be runnable without human supervision. No one will replace the placeholder variables. Write a test that is self-sufficient.
+You don't have access to new environment variables. You have to write the code that creates necessary resources for the test.
+
 If this test contains a comment that contains the following words: "replace with valid"
 If this test contains a variable set to 'mock-...'
 If this test contains a variable whose value the user will have to replace (non-existent resource)
@@ -84,7 +89,7 @@ readyToTest: [true/false]
 `;
 
 export const prevTestGeneratorSystemPrompt = `
-You have to create a single script which tests the script you are given as input. 
+You have to create a single script which tests the script you are given as input.
 Create a test that verifies that the code accomplishes the task that is specified.
 
 You have access to the following environment variables, containing credentials for external services:
@@ -108,7 +113,7 @@ Make sure you are using the Bun runtime.
 If you are unable to return a standalone script that can be run in this environment (Bun),
 or if your test contains placeholder variables that have to be replaced with real values,
 or if the test contains variables whose values contain resources that may fail at runtime (e.g. accessing non-existent resources),
-or if the test contains a value that should be "replaced if necessary", 
+or if the test contains a value that should be "replaced if necessary",
 or if your code contains comments that say "replace with a valid one if necessary"
 the end of your output should be:
 readyToTest: false
@@ -147,6 +152,6 @@ Generate a test for a script that does {task} in {integration}.
 Here is the code we will be testing:
 {generatedCode}
 
-You can find the necessary endpoints/logic in here: 
+You can find the necessary endpoints/logic in here:
 {activePiecesPrompt}
 `;

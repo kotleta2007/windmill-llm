@@ -1,17 +1,31 @@
 import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage, AIMessage, BaseMessage, SystemMessage } from "@langchain/core/messages";
+import {
+  HumanMessage,
+  AIMessage,
+  BaseMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 import { StateGraph, START, END } from "@langchain/langgraph";
 import { Runnable } from "@langchain/core/runnables";
-import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { codeGeneratorSystemPrompt, codeGeneratorUserPrompt, exampleWindmillScript, testGeneratorSystemPrompt, testGeneratorUserPrompt } from "./prompts";
-import { getActivePiecesScripts} from "./octokit";
+import {
+  codeGeneratorSystemPrompt,
+  codeGeneratorUserPrompt,
+  exampleWindmillScript,
+  testGeneratorSystemPrompt,
+  testGeneratorUserPrompt,
+} from "./prompts";
+import { getActivePiecesScripts } from "./octokit";
 import { getEnvVariableNames, getDependencies } from "./read-local";
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { spawnSync } from 'child_process';
-import { staticTests } from './staticTests';
+import * as fs from "fs/promises";
+import * as path from "path";
+import { spawnSync } from "child_process";
+import { staticTests } from "./staticTests";
 import { TavilySearchAPIRetriever } from "@langchain/community/retrievers/tavily_search_api";
 import { searchAndGetLinks } from "../tavily-request";
 import { crawlAndExtractApiEndpoints } from "../api-web-crawler";
@@ -19,31 +33,34 @@ import { crawlAndExtractApiEndpoints } from "../api-web-crawler";
 // Model type
 const modelType = "gpt-4o";
 
+// Recursion Limit
+const NUM_CYCLES = 3;
+
 // Dummy functions for external services
 const Tavily = {
-  search: async function(query: string) {
+  search: async function (query: string) {
     console.log(`Tavily search called with query: ${query}`);
     try {
       const links = await searchAndGetLinks(query);
-      console.log('Crawling links for API endpoints...');
+      console.log("Crawling links for API endpoints...");
       const endpointMap = await crawlAndExtractApiEndpoints(links);
 
       let result = `Search results for query: ${query}\n\n`;
 
       for (const [link, endpoints] of endpointMap) {
         result += `Endpoints found in ${link}:\n`;
-        endpoints.forEach(endpoint => {
+        endpoints.forEach((endpoint) => {
           result += `  ${endpoint.method} ${endpoint.path}\n`;
         });
-        result += '\n';
+        result += "\n";
       }
 
       return result;
     } catch (error) {
-      console.error('Error in Tavily search:', error);
+      console.error("Error in Tavily search:", error);
       return `Error occurred during search: ${error.message}`;
     }
-  }
+  },
 };
 
 // const Tavily = {
@@ -59,10 +76,10 @@ const Tavily = {
 //     try {
 //       const retrievedDocs = await this.retriever.invoke(query);
 //       console.log({ retrievedDocs });
-//       
+//
 //       // Process the retrieved documents to extract relevant information
 //       const relevantInfo = retrievedDocs.map(doc => doc.pageContent).join("\n");
-//       
+//
 //       return `Additional information for ${query}: ${relevantInfo}`;
 //     } catch (error) {
 //       console.error("Error calling Tavily:", error);
@@ -80,11 +97,15 @@ const Windmill = {
     // console.log("Here are the tests")
     // console.log(tests)
     return "Successfully submitted to Windmill Hub";
-  }
+  },
 };
 
 // Agent creation helper
-async function createAgent(name: string, systemMessage: string, modelType: string): Promise<Runnable> {
+async function createAgent(
+  name: string,
+  systemMessage: string,
+  modelType: string,
+): Promise<Runnable> {
   let llm: BaseChatModel;
 
   switch (modelType) {
@@ -127,14 +148,24 @@ async function createAgent(name: string, systemMessage: string, modelType: strin
 }
 
 // Create agents
-const reviewer = await createAgent("Reviewer", "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.", modelType);
+const reviewer = await createAgent(
+  "Reviewer",
+  "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.",
+  modelType,
+);
 // const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
-const codeGenerator = await createAgent("CodeGenerator", codeGeneratorSystemPrompt, modelType);
-const testGenerator = await createAgent("TestGenerator", 
-                                        testGeneratorSystemPrompt
-                                          .replace("{envVariables}", getEnvVariableNames())
-                                          .replace("{dependencies}", getDependencies()),
-                                        modelType);
+const codeGenerator = await createAgent(
+  "CodeGenerator",
+  codeGeneratorSystemPrompt,
+  modelType,
+);
+const testGenerator = await createAgent(
+  "TestGenerator",
+  testGeneratorSystemPrompt
+    .replace("{envVariables}", getEnvVariableNames().toString())
+    .replace("{dependencies}", getDependencies().toString()),
+  modelType,
+);
 
 // Define state
 interface AgentState {
@@ -167,14 +198,18 @@ const workflow = new StateGraph<AgentState>({
     additionalInfo: { value: (x, y) => y ?? x },
     submitted: { value: (x, y) => y ?? x ?? false },
     reviewed: { value: (x, y) => y ?? x ?? false },
-  }
+  },
 });
 
 // Add nodes
 workflow.addNode("Reviewer", async (state) => {
   console.log("Reviewer Agent called");
-  
-  let newState: Partial<AgentState> = { ...state, sender: "Reviewer", reviewed: true };
+
+  let newState: Partial<AgentState> = {
+    ...state,
+    sender: "Reviewer",
+    reviewed: true,
+  };
 
   if (state.code && state.tests && state.testResults) {
     const input = `
@@ -184,7 +219,7 @@ workflow.addNode("Reviewer", async (state) => {
       Test Results: ${state.testResults}\n
       Static Test Results: ${state.staticTestResults}\n
       Generated Test Results: ${state.genTestResults}\n
-      Decide if this is ready to submit or needs more work. 
+      Decide if this is ready to submit or needs more work.
       Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
 
     const result = await reviewer.invoke({
@@ -197,7 +232,12 @@ workflow.addNode("Reviewer", async (state) => {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
       newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
-      const tavilyResult = await Tavily.search(`${state.integration} ${state.task} API endpoints`);
+      const tavilyResult = await Tavily.search(
+        `${state.integration} ${state.task} API endpoints`,
+      );
+
+      console.log("HERE IS WHAT I HAVE FOUND");
+      console.log(tavilyResult);
       newState.additionalInfo = tavilyResult;
 
       // Reset the state values
@@ -210,89 +250,58 @@ workflow.addNode("Reviewer", async (state) => {
       newState.reviewed = true;
     }
   }
-  
+
   return newState;
 });
 
 workflow.addNode("CodeGenerator", async (state) => {
   console.log("CodeGenerator Agent called");
-  
-  // // Iterate over the properties of the state object
-  // console.log("State Before:");
-  // for (const [key, value] of Object.entries(state)) {
-  //   // For simple values, print directly
-  //   if (typeof value !== 'object' || value === null) {
-  //     console.log(`${key}: ${value}`);
-  //   } else if (Array.isArray(value)) {
-  //     // For arrays, print the length and the first few elements
-  //     console.log(`${key}: Array of length ${value.length}`);
-  //     console.log(`First few elements: ${JSON.stringify(value.slice(0, 3))}`);
-  //   } else {
-  //     // For objects, print a stringified version (limited to 100 characters)
-  //     const stringValue = JSON.stringify(value).slice(0, 100);
-  //     console.log(`${key}: ${stringValue}${stringValue.length >= 100 ? '...' : ''}`);
-  //   }
-  // }
-  
-  let input = 
-    codeGeneratorUserPrompt
+
+  let input = codeGeneratorUserPrompt
     .replace("{integration}", state.integration)
     .replace("{task}", state.task)
     .replace("{example}", exampleWindmillScript)
-    .replace("{activePiecesPrompt}", await getActivePiecesScripts(state.integration, state.task))
+    .replace(
+      "{activePiecesPrompt}",
+      await getActivePiecesScripts(state.integration, state.task),
+    );
 
   if (state.additionalInfo) {
-    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`
+    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
   }
 
   const result = await codeGenerator.invoke({
     input: input,
   });
   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
-  const code = match?.[1] || '';
+  const code = match?.[1] || "";
 
   // Write the code to a local file
   try {
-    const filePath = path.join(process.cwd(), 'generated-code.ts');
-    await fs.writeFile(filePath, code, 'utf8');
+    const filePath = path.join(process.cwd(), "generated-code.ts");
+    await fs.writeFile(filePath, code, "utf8");
     console.log(`Generated code has been written to ${filePath}`);
   } catch (error) {
-    console.error('Error writing generated code to file:', error);
+    console.error("Error writing generated code to file:", error);
   }
-
-  // // Iterate over the properties of the state object
-  // console.log("State After:");
-  // for (const [key, value] of Object.entries(state)) {
-  //   // For simple values, print directly
-  //   if (typeof value !== 'object' || value === null) {
-  //     console.log(`${key}: ${value}`);
-  //   } else if (Array.isArray(value)) {
-  //     // For arrays, print the length and the first few elements
-  //     console.log(`${key}: Array of length ${value.length}`);
-  //     console.log(`First few elements: ${JSON.stringify(value.slice(0, 3))}`);
-  //   } else {
-  //     // For objects, print a stringified version (limited to 100 characters)
-  //     const stringValue = JSON.stringify(value).slice(0, 100);
-  //     console.log(`${key}: ${stringValue}${stringValue.length >= 100 ? '...' : ''}`);
-  //   }
-  // }
- 
 
   return { ...state, sender: "CodeGenerator", code: code };
 });
 
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");
-  
-  let input = 
-    testGeneratorUserPrompt
+
+  let input = testGeneratorUserPrompt
     .replace("{task}", state.task)
     .replace("{integration}", state.integration)
     .replace("{generatedCode}", state.code!)
-    .replace("{activePiecesPrompt}", await getActivePiecesScripts(state.integration, state.task))
+    .replace(
+      "{activePiecesPrompt}",
+      await getActivePiecesScripts(state.integration, state.task),
+    );
 
   if (state.additionalInfo) {
-    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`
+    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
   }
 
   const result = await testGenerator.invoke({
@@ -300,26 +309,26 @@ workflow.addNode("TestGenerator", async (state) => {
   });
 
   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
-  const tests = match?.[1] || '';
+  const tests = match?.[1] || "";
 
   // console.log(input)
   // console.log(result.content)
 
   // Write the tests to a local file
   try {
-    const filePath = path.join(process.cwd(), 'generated-tests.ts');
-    await fs.writeFile(filePath, tests, 'utf8');
+    const filePath = path.join(process.cwd(), "generated-tests.ts");
+    await fs.writeFile(filePath, tests, "utf8");
     console.log(`Generated tests have been written to ${filePath}`);
   } catch (error) {
-    console.error('Error writing generated tests to file:', error);
+    console.error("Error writing generated tests to file:", error);
   }
 
-  await new Promise(f => setTimeout(f, 1000));
+  await new Promise((f) => setTimeout(f, 1000));
 
   // Execute static tests
   let staticTestResults: string;
   try {
-    staticTestResults = await staticTests('generated-code.ts');
+    staticTestResults = await staticTests("generated-code.ts");
   } catch (error) {
     staticTestResults = `Error running static tests: ${error}`;
   }
@@ -327,9 +336,9 @@ workflow.addNode("TestGenerator", async (state) => {
   // Execute generated tests
   let genTestResults: string;
   try {
-    const result = spawnSync('bun', ['run', 'generated-tests.ts'], {
-      encoding: 'utf8',
-      stdio: 'pipe'
+    const result = spawnSync("bun", ["run", "generated-tests.ts"], {
+      encoding: "utf8",
+      stdio: "pipe",
     });
 
     genTestResults = `stdout: ${result.stdout}\nstderr: ${result.stderr}`;
@@ -338,7 +347,7 @@ workflow.addNode("TestGenerator", async (state) => {
       genTestResults += `\nProcess exited with status ${result.status}`;
     }
   } catch (error) {
-    genTestResults = `Error running generated tests: ${error}\nstdout: \nstderr: ${error.message || ''}`;
+    genTestResults = `Error running generated tests: ${error}\nstdout: \nstderr: ${error.message || ""}`;
   }
 
   // console.log("Static test results")
@@ -346,19 +355,20 @@ workflow.addNode("TestGenerator", async (state) => {
   // console.log("Generated test results")
   // console.log(genTestResults)
 
-  return { 
+  return {
     ...state,
-    sender: "TestGenerator", 
+    sender: "TestGenerator",
     tests: tests,
     staticTestResults: staticTestResults,
     genTestResults: genTestResults,
-    testResults: "All tests executed. Check staticTestResults and genTestResults for details."
+    testResults:
+      "All tests executed. Check staticTestResults and genTestResults for details.",
   };
 });
 // workflow.addNode("TestGenerator", async (state) => {
 //   console.log("TestGenerator Agent called");
-//   
-//   const input = 
+//
+//   const input =
 //     testGeneratorUserPrompt
 //     .replace("{task}", state.task)
 //     .replace("{integration}", state.integration)
@@ -385,9 +395,9 @@ workflow.addNode("TestGenerator", async (state) => {
 //
 //   await new Promise(f => setTimeout(f, 1000));
 //
-//   return { 
+//   return {
 //     ...state,
-//     sender: "TestGenerator", 
+//     sender: "TestGenerator",
 //     tests: tests,
 //     testResults: "All tests passed successfully." // Simulated test results
 //   };
@@ -418,19 +428,19 @@ function router(state: AgentState) {
 //     console.log("WE ARE DONE");
 //     return "end";
 //   }
-//   
+//
 //   if (!state.code) {
 //     return "CodeGenerator";
 //   }
-//   
+//
 //   if (!state.tests || !state.testResults || !state.staticTestResults || !state.genTestResults) {
 //     return "TestGenerator";
 //   }
-//   
+//
 //   if (!state.reviewed) {
 //     return "Reviewer";
 //   }
-//   
+//
 //   return "CodeGenerator";
 // }
 
@@ -463,13 +473,15 @@ const graph = workflow.compile();
 
 // Run the graph
 async function runWorkflow(integration: string, task: string) {
-  const result = await graph.invoke({
-    integration: integration,
-    task: task,
-  },
-  {
-    recursionLimit: 10,
-  });
+  const result = await graph.invoke(
+    {
+      integration: integration,
+      task: task,
+    },
+    {
+      recursionLimit: 3 * NUM_CYCLES + 1,
+    },
+  );
 
   console.log("Final Result:");
   console.log(JSON.stringify(result, null, 2));
@@ -477,10 +489,10 @@ async function runWorkflow(integration: string, task: string) {
 
 // Example usage
 // runWorkflow("claude", "send-prompt");
-// runWorkflow("github", "create-comment");
+runWorkflow("github", "create-comment-on-an-issue");
 //
 // runWorkflow("clarifai", "ask-llm");
 // runWorkflow("binance", "fetch-pair-price");
 // runWorkflow("deepl", "translate-text");
 // runWorkflow("hackernews", "top-stories-in-hackernews");
-runWorkflow("straico", "prompt-completion");
+// runWorkflow("straico", "prompt-completion");
