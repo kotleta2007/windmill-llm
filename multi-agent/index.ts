@@ -197,7 +197,7 @@ workflow.addNode("Reviewer", async (state) => {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
       newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
-      const tavilyResult = await Tavily.search(`${state.integration} ${state.task}`);
+      const tavilyResult = await Tavily.search(`${state.integration} ${state.task} API endpoints`);
       newState.additionalInfo = tavilyResult;
 
       // Reset the state values
@@ -234,12 +234,16 @@ workflow.addNode("CodeGenerator", async (state) => {
   //   }
   // }
   
-  const input = 
+  let input = 
     codeGeneratorUserPrompt
     .replace("{integration}", state.integration)
     .replace("{task}", state.task)
     .replace("{example}", exampleWindmillScript)
     .replace("{activePiecesPrompt}", await getActivePiecesScripts(state.integration, state.task))
+
+  if (state.additionalInfo) {
+    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`
+  }
 
   const result = await codeGenerator.invoke({
     input: input,
@@ -280,12 +284,16 @@ workflow.addNode("CodeGenerator", async (state) => {
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");
   
-  const input = 
+  let input = 
     testGeneratorUserPrompt
     .replace("{task}", state.task)
     .replace("{integration}", state.integration)
     .replace("{generatedCode}", state.code!)
     .replace("{activePiecesPrompt}", await getActivePiecesScripts(state.integration, state.task))
+
+  if (state.additionalInfo) {
+    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`
+  }
 
   const result = await testGenerator.invoke({
     input: input,
