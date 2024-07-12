@@ -291,117 +291,135 @@ workflow.addNode("CodeGenerator", async (state) => {
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");
 
-  let input = testGeneratorUserPrompt
-    .replace("{task}", state.task)
-    .replace("{integration}", state.integration)
-    .replace("{generatedCode}", state.code!)
-    .replace(
-      "{activePiecesPrompt}",
-      await getActivePiecesScripts(state.integration, state.task),
-    );
+  const maxAttempts = 5; // Maximum number of attempts to generate self-sufficient tests
+  let attempt = 0;
+  let tests = "";
+  let isSelfSufficient = false;
+  let feedback = "";
 
-  if (state.additionalInfo) {
-    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
-  }
+  while (attempt < maxAttempts && !isSelfSufficient) {
+    attempt++;
+    console.log(`Test generation attempt ${attempt}`);
 
-  const result = await testGenerator.invoke({
-    input: input,
-  });
+    let input = testGeneratorUserPrompt
+      .replace("{task}", state.task)
+      .replace("{integration}", state.integration)
+      .replace("{generatedCode}", state.code!)
+      .replace(
+        "{activePiecesPrompt}",
+        await getActivePiecesScripts(state.integration, state.task),
+      );
 
-  const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
-  const tests = match?.[1] || "";
+    if (state.additionalInfo) {
+      input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
+    }
 
-  // console.log(input)
-  // console.log(result.content)
+    if (attempt > 1) {
+      input += `\n\nPrevious attempt was not self-sufficient or failed to execute. Please address the following feedback and ensure the test code is completely self-sufficient, without any placeholders or mock values that require human intervention:\n${feedback}`;
+    }
 
-  // Write the tests to a local file
-  try {
-    const filePath = path.join(process.cwd(), "generated-tests.ts");
-    await fs.writeFile(filePath, tests, "utf8");
-    console.log(`Generated tests have been written to ${filePath}`);
-  } catch (error) {
-    console.error("Error writing generated tests to file:", error);
-  }
-
-  await new Promise((f) => setTimeout(f, 1000));
-
-  // Execute static tests
-  let staticTestResults: string;
-  try {
-    staticTestResults = await staticTests("generated-code.ts");
-  } catch (error) {
-    staticTestResults = `Error running static tests: ${error}`;
-  }
-
-  // Execute generated tests
-  let genTestResults: string;
-  try {
-    const result = spawnSync("bun", ["run", "generated-tests.ts"], {
-      encoding: "utf8",
-      stdio: "pipe",
+    const result = await testGenerator.invoke({
+      input: input,
     });
 
-    genTestResults = `stdout: ${result.stdout}\nstderr: ${result.stderr}`;
+    const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
+    tests = match?.[1] || "";
 
-    if (result.status !== 0) {
-      genTestResults += `\nProcess exited with status ${result.status}`;
+    // Check if it's self-sufficient
+    const checkResult = await testGenerator.invoke({
+      input:
+        testGeneratorUserPrompt
+          .replace("{task}", state.task)
+          .replace("{integration}", state.integration)
+          .replace("{generatedCode}", state.code!)
+          .replace(
+            "{activePiecesPrompt}",
+            await getActivePiecesScripts(state.integration, state.task),
+          ) +
+        `Is the following test code self-sufficient?
+         Is it free from variables that have to be replaced by a human so that the tests can be run?
+         If it's self-sufficient, say FINAL and provide the final code in a typescript code block.
+         If it's not, say NEEDS WORK and explain in detail what has to be changed so that the code becomes self-sufficient.
+
+      Test:
+      ${tests}
+
+      - END OF TEST -
+
+      If it's self-sufficient, say FINAL and provide the final code in a typescript code block.
+      If it can be run using these env variables, say FINAL and provide the final code in a typescript code block:
+      ${getEnvVariableNames()}
+    `,
+    });
+
+    console.log(checkResult.content);
+
+    isSelfSufficient = checkResult.content.includes("FINAL");
+
+    if (isSelfSufficient) {
+      // Extract the final code from checkResult
+      const finalCodeMatch = checkResult.content.match(
+        /```typescript\n([\s\S]*?)\n```/,
+      );
+      if (finalCodeMatch) {
+        tests = finalCodeMatch[1]; // Update tests with the final code
+      } else {
+        console.error("No final code block found in checkResult");
+        isSelfSufficient = false;
+        continue;
+      }
+    } else {
+      feedback = checkResult.content.replace("NEEDS WORK", "").trim();
+      console.log(`Test code not self-sufficient. Feedback: ${feedback}`);
+      continue;
     }
-  } catch (error) {
-    genTestResults = `Error running generated tests: ${error}\nstdout: \nstderr: ${error.message || ""}`;
-  }
 
-  // console.log("Static test results")
-  // console.log(staticTestResults)
-  // console.log("Generated test results")
-  // console.log(genTestResults)
+    // Write the tests to a local file
+    try {
+      const filePath = path.join(process.cwd(), "generated-tests.ts");
+      await fs.writeFile(filePath, tests, "utf8");
+      console.log(`Generated tests have been written to ${filePath}`);
+    } catch (error) {
+      console.error("Error writing generated tests to file:", error);
+      isSelfSufficient = false;
+      continue;
+    }
+
+    // Try to execute the tests
+    let executionResult;
+    try {
+      executionResult = spawnSync("bun", ["run", "generated-tests.ts"], {
+        encoding: "utf8",
+        stdio: "pipe",
+        env: process.env, // Pass through the current environment variables
+      });
+
+      console.log("Test execution output:", executionResult.stdout);
+      console.error("Test execution errors:", executionResult.stderr);
+
+      if (executionResult.status !== 0) {
+        throw new Error(
+          `Execution failed with status ${executionResult.status}`,
+        );
+      }
+    } catch (error) {
+      console.error(`Error executing tests: ${error}`);
+      feedback = `Test execution failed. Error: ${error}\nStdout: ${executionResult?.stdout}\nStderr: ${executionResult?.stderr}`;
+      isSelfSufficient = false;
+    }
+  }
 
   return {
     ...state,
     sender: "TestGenerator",
     tests: tests,
-    staticTestResults: staticTestResults,
-    genTestResults: genTestResults,
-    testResults:
-      "All tests executed. Check staticTestResults and genTestResults for details.",
+    testResults: isSelfSufficient
+      ? "Self-sufficient tests generated and executed successfully."
+      : "Could not generate self-sufficient and executable tests after maximum attempts.",
+    isSelfSufficient: isSelfSufficient,
+    testGenerationFeedback: feedback,
   };
 });
-// workflow.addNode("TestGenerator", async (state) => {
-//   console.log("TestGenerator Agent called");
-//
-//   const input =
-//     testGeneratorUserPrompt
-//     .replace("{task}", state.task)
-//     .replace("{integration}", state.integration)
-//     .replace("{generatedCode}", state.code!)
-//
-//   const result = await testGenerator.invoke({
-//     input: input,
-//   });
-//
-//   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
-//   const tests = match?.[1] || '';
-//
-//   console.log(input)
-//   console.log(result.content)
-//
-//   // Write the tests to a local file
-//   try {
-//     const filePath = path.join(process.cwd(), 'generated-tests.ts');
-//     await fs.writeFile(filePath, tests, 'utf8');
-//     console.log(`Generated tests have been written to ${filePath}`);
-//   } catch (error) {
-//     console.error('Error writing generated tests to file:', error);
-//   }
-//
-//   await new Promise(f => setTimeout(f, 1000));
-//
-//   return {
-//     ...state,
-//     sender: "TestGenerator",
-//     tests: tests,
-//     testResults: "All tests passed successfully." // Simulated test results
-//   };
-// });
 
 // Router function
 function router(state: AgentState) {

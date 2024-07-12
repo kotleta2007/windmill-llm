@@ -1,6 +1,6 @@
-import { fetch } from 'bun';
-import * as cheerio from 'cheerio';
-import { searchAndGetLinks } from './tavily-request';
+import { Browser, Page, firefox } from "playwright";
+import * as cheerio from "cheerio";
+import { searchAndGetLinks } from "./tavily-request";
 
 interface ApiEndpoint {
   method: string;
@@ -8,13 +8,13 @@ interface ApiEndpoint {
   description?: string;
 }
 
-async function fetchContent(url: string): Promise<string> {
+async function fetchContent(page: Page, url: string): Promise<string> {
   try {
-    const response = await fetch(url);
-    return await response.text();
+    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+    return await page.content();
   } catch (error) {
-    console.error(`Error fetching ${url}:`, error);
-    return '';
+    console.error(`Error in fetchContent for ${url}:`, error);
+    return "";
   }
 }
 
@@ -22,60 +22,84 @@ function extractApiEndpoints(content: string): ApiEndpoint[] {
   const $ = cheerio.load(content);
   const endpoints: ApiEndpoint[] = [];
 
-  // Look for common patterns in API documentation
-  $('pre, code, table').each((_, element) => {
+  $(
+    'span.IssueLabel:contains("get"), span.IssueLabel:contains("post"), span.IssueLabel:contains("put"), span.IssueLabel:contains("delete"), span.IssueLabel:contains("patch")',
+  ).each((_, element) => {
+    const methodElement = $(element);
+    const pathElement = methodElement.next("span");
+
+    if (pathElement.length) {
+      const method = methodElement.text().trim().toUpperCase();
+      const path = pathElement.text().trim();
+
+      if (method && path) {
+        endpoints.push({ method, path });
+      }
+    }
+  });
+
+  $("pre, code, table").each((_, element) => {
     const text = $(element).text();
-    
-    // Simple regex to match potential API endpoints
-    // This regex looks for HTTP methods followed by a path
-    const matches = text.match(/\b(GET|POST|PUT|DELETE|PATCH)\s+(\/[\w\/\-{}]+)/g);
-    
+    const matches = text.match(
+      /\b(GET|POST|PUT|DELETE|PATCH)\s+(\/[\w\/\-{}]+)/g,
+    );
+
     if (matches) {
-      matches.forEach(match => {
+      matches.forEach((match) => {
         const [method, path] = match.split(/\s+/);
         endpoints.push({ method, path });
       });
     }
   });
 
-  return endpoints;
+  return Array.from(new Set(endpoints.map(JSON.stringify))).map(JSON.parse);
 }
 
-export async function crawlAndExtractApiEndpoints(links: string[]): Promise<Map<string, ApiEndpoint[]>> {
+export async function crawlAndExtractApiEndpoints(
+  links: string[],
+): Promise<Map<string, ApiEndpoint[]>> {
   const endpointMap = new Map<string, ApiEndpoint[]>();
+  let browser: Browser | null = null;
+  let page: Page | null = null;
 
-  for (const link of links) {
-    console.log(`Crawling: ${link}`);
-    const content = await fetchContent(link);
-    if (content) {
-      const endpoints = extractApiEndpoints(content);
-      if (endpoints.length > 0) {
-        endpointMap.set(link, endpoints);
+  try {
+    browser = await firefox.launch({ timeout: 30000 });
+    page = await browser.newPage();
+
+    for (const link of links) {
+      const content = await fetchContent(page, link);
+      if (content) {
+        const endpoints = extractApiEndpoints(content);
+        if (endpoints.length > 0) {
+          endpointMap.set(link, endpoints);
+        }
       }
     }
+  } catch (error) {
+    console.error("Error in crawlAndExtractApiEndpoints:", error);
+  } finally {
+    if (page) await page.close().catch(console.error);
+    if (browser) await browser.close().catch(console.error);
   }
 
   return endpointMap;
 }
 
-// Example usage in main function
 async function main() {
   try {
-    const query = 'Clarifai API endpoints';
+    const query = "Github API endpoints";
     const links = await searchAndGetLinks(query);
-    console.log('Crawling links for API endpoints...');
     const endpointMap = await crawlAndExtractApiEndpoints(links);
 
     for (const [link, endpoints] of endpointMap) {
       console.log(`\nEndpoints found in ${link}:`);
-      endpoints.forEach(endpoint => {
+      endpoints.forEach((endpoint) => {
         console.log(`  ${endpoint.method} ${endpoint.path}`);
       });
     }
   } catch (error) {
-    console.error('Error in main:', error);
+    console.error("Error in main:", error);
   }
 }
 
-// Run the main function
 // main();

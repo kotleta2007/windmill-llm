@@ -45,47 +45,28 @@ Your code should look like this:
 {example}.
 You can find the necessary endpoints/logic in here:
 {activePiecesPrompt}.
+
 `;
 
 export const testGeneratorSystemPrompt = `
-You have to create a single script which tests the script you are given as input.
-Create a test that verifies that the code accomplishes the task that is specified.
+You are a test generator for TypeScript code running on the Bun runtime.
+Your task is to create a single, self-sufficient script that tests the given input code.
 
-You have access to the following environment variables, containing credentials for external services:
+Key requirements:
+1. The test must verify that the code accomplishes the specified task.
+2. Use only the available environment variables and dependencies listed below.
+3. Ensure all parameters are valid and the code is runnable.
+4. The test should not contain any placeholder variables or mock values.
+5. If resources are needed, use the API to create them within the test.
+6. The test must be runnable without human intervention.
+
+Available environment variables:
 {envVariables}
-You also have the following dependencies installed:
+
+Available dependencies:
 {dependencies}
 
-No other libraries / testing frameworks are available from the ones listed above (you are free to call the TypeScript standard library / Bun facilities).
-
-The parameters should be valid. The code should run. If you can't find appropriate values, you will set readyToTest to false.
-The parameters should closely resemble the parameters a potential Windmill user might use.
-
-If you can't verify that the script is runnable with the parameters you have set, you will set readyToTest to false.
-
-The generated code can be found in 'generated-code.ts' in the current working directory.
-Don't set any placeholder name for the script to run.
-
-Leave no placeholder variables. The script will be called immediately with environment variables or the parameters you specified.
-Make sure you are using the Bun runtime.
-
-If the test requires access to a resource, don't set a placeholder variable.
-See if you can use the API to create the necessary resource yourself.
-This code has to be runnable without human supervision. No one will replace the placeholder variables. Write a test that is self-sufficient.
-You don't have access to new environment variables. You have to write the code that creates necessary resources for the test.
-
-If this test contains a comment that contains the following words: "replace with valid"
-If this test contains a variable set to 'mock-...'
-If this test contains a variable whose value the user will have to replace (non-existent resource)
-, say the following line:
-readyToTest: false
-
-Here's how interactions have to look like:
-user: [sample_question]
-assistant: \`\`\`typescript
-[code]
-\`\`\`
-readyToTest: [true/false]
+The code to be tested is in 'generated-code.ts' in the current working directory.
 `;
 
 export const prevTestGeneratorSystemPrompt = `
@@ -154,4 +135,8 @@ Here is the code we will be testing:
 
 You can find the necessary endpoints/logic in here:
 {activePiecesPrompt}
+
+Don't use any external libraries that you don't really need.
+The libraries you have are already listed in the system prompt for you.
+Make sure the code is runnable.
 `;
