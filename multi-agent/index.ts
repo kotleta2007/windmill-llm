@@ -150,7 +150,12 @@ async function createAgent(
 // Create agents
 const reviewer = await createAgent(
   "Reviewer",
-  "You are a code reviewer. Your job is to analyze code, tests, and test results. You do not write code. You decide if the code meets the requirements and is ready for submission, or if it needs more work.",
+  `
+  You are a code reviewer.
+  Your job is to analyze code, tests, and test results.
+  You do not write code.
+  You decide if the code meets the requirements and is ready for submission, or if it needs more work.
+  `,
   modelType,
 );
 // const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
@@ -220,6 +225,9 @@ workflow.addNode("Reviewer", async (state) => {
       Static Test Results: ${state.staticTestResults}\n
       Generated Test Results: ${state.genTestResults}\n
       Decide if this is ready to submit or needs more work.
+      The code should be functional and the test should validate its functionality.
+      Don't bother with comments, best developer practices and documentation.
+      Just make sure it does what it says on the tin.
       Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
 
     const result = await reviewer.invoke({
@@ -227,6 +235,9 @@ workflow.addNode("Reviewer", async (state) => {
     });
 
     // console.log(result.content);
+    console.log(input);
+
+    console.log(result.content);
 
     if (result.content.includes("VALIDATED")) {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
