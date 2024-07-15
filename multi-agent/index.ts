@@ -228,6 +228,7 @@ workflow.addNode("Reviewer", async (state) => {
       The code should be functional and the test should validate its functionality.
       Don't bother with comments, best developer practices and documentation.
       Just make sure it does what it says on the tin.
+      Make sure the test is executable.
       Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
 
     const result = await reviewer.invoke({
@@ -235,9 +236,9 @@ workflow.addNode("Reviewer", async (state) => {
     });
 
     // console.log(result.content);
-    console.log(input);
+    // console.log(input);
 
-    console.log(result.content);
+    // console.log(result.content);
 
     if (result.content.includes("VALIDATED")) {
       const windmillResult = Windmill.submitToHub(state.code, state.tests);
@@ -247,8 +248,8 @@ workflow.addNode("Reviewer", async (state) => {
         `${state.integration} ${state.task} API endpoints`,
       );
 
-      console.log("HERE IS WHAT I HAVE FOUND");
-      console.log(tavilyResult);
+      // console.log("HERE IS WHAT I HAVE FOUND");
+      // console.log(tavilyResult);
       newState.additionalInfo = tavilyResult;
 
       // Reset the state values
@@ -349,8 +350,11 @@ workflow.addNode("TestGenerator", async (state) => {
           ) +
         `Is the following test code self-sufficient?
          Is it free from variables that have to be replaced by a human so that the tests can be run?
-         If it's self-sufficient, say FINAL and provide the final code in a typescript code block.
-         If it's not, say NEEDS WORK and explain in detail what has to be changed so that the code becomes self-sufficient.
+         Does it have all the resources it needs (it acquired them, created them or found the necessary credentials in these env variables)?
+         ${getDependencies()}
+         Does it remove the resources it created?
+         If you said YES to all these questions, say FINAL and provide the final code in a typescript code block.
+         If not, say NEEDS WORK and explain in detail what has to be changed so that the code becomes self-sufficient.
 
       Test:
       ${tests}
@@ -363,7 +367,7 @@ workflow.addNode("TestGenerator", async (state) => {
     `,
     });
 
-    console.log(checkResult.content);
+    // console.log(checkResult.content);
 
     isSelfSufficient = checkResult.content.includes("FINAL");
 
@@ -381,7 +385,7 @@ workflow.addNode("TestGenerator", async (state) => {
       }
     } else {
       feedback = checkResult.content.replace("NEEDS WORK", "").trim();
-      console.log(`Test code not self-sufficient. Feedback: ${feedback}`);
+      // console.log(`Test code not self-sufficient. Feedback: ${feedback}`);
       continue;
     }
 
@@ -405,8 +409,8 @@ workflow.addNode("TestGenerator", async (state) => {
         env: process.env, // Pass through the current environment variables
       });
 
-      console.log("Test execution output:", executionResult.stdout);
-      console.error("Test execution errors:", executionResult.stderr);
+      // console.log("Test execution output:", executionResult.stdout);
+      // console.error("Test execution errors:", executionResult.stderr);
 
       if (executionResult.status !== 0) {
         throw new Error(
@@ -512,16 +516,49 @@ async function runWorkflow(integration: string, task: string) {
     },
   );
 
-  console.log("Final Result:");
-  console.log(JSON.stringify(result, null, 2));
+  // console.log("Final Result:");
+  // console.log(JSON.stringify(result, null, 2));
 }
 
 // Example usage
 // runWorkflow("claude", "send-prompt");
-runWorkflow("github", "create-comment-on-an-issue");
+// runWorkflow("github", "create-comment-on-an-issue");
 //
 // runWorkflow("clarifai", "ask-llm");
 // runWorkflow("binance", "fetch-pair-price");
 // runWorkflow("deepl", "translate-text");
 // runWorkflow("hackernews", "top-stories-in-hackernews");
 // runWorkflow("straico", "prompt-completion");
+
+async function main() {
+  // Get command line arguments
+  const args = process.argv.slice(2); // Remove the first two elements (node and script name)
+
+  // Check if we have the correct number of arguments
+  if (args.length !== 2) {
+    console.error("Usage: bun run index.ts <integration> <task>");
+    process.exit(1);
+  }
+
+  // Extract integration and task from arguments
+  const [integration, task] = args;
+
+  // Log the input
+  console.log(
+    `Running workflow for integration: ${integration}, task: ${task}`,
+  );
+
+  try {
+    // Run the workflow
+    runWorkflow(integration, task);
+  } catch (error) {
+    console.error("Error running workflow:", error);
+    process.exit(1);
+  }
+}
+
+// Run the main function
+main().catch((error) => {
+  console.error("Unhandled error:", error);
+  process.exit(1);
+});

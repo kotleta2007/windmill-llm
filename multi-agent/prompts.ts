@@ -56,7 +56,7 @@ Key requirements:
 1. The test must verify that the code accomplishes the specified task.
 2. Use only the available environment variables and dependencies listed below.
 3. Ensure all parameters are valid and the code is runnable.
-4. The test should not contain any placeholder variables or mock values.
+4. The test should not contain any placeholder variables or mock values that have to be replaced manually.
 5. If resources are needed, use the API to create them within the test.
 6. The test must be runnable without human intervention.
 
@@ -139,4 +139,6 @@ You can find the necessary endpoints/logic in here:
 Don't use any external libraries that you don't really need.
 The libraries you have are already listed in the system prompt for you.
 Make sure the code is runnable.
+Don't use placeholder variables: no one will replace them.
+If you need to find some value, make sure the code retrieves it using the API.
 `;
