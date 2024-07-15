@@ -1,18 +1,4 @@
-import { ChatGroq } from "@langchain/groq";
-import { ChatOpenAI } from "@langchain/openai";
-import {
-  HumanMessage,
-  AIMessage,
-  BaseMessage,
-  SystemMessage,
-} from "@langchain/core/messages";
 import { StateGraph, START, END } from "@langchain/langgraph";
-import { Runnable } from "@langchain/core/runnables";
-import {
-  ChatPromptTemplate,
-  MessagesPlaceholder,
-} from "@langchain/core/prompts";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import {
   codeGeneratorSystemPrompt,
   codeGeneratorUserPrompt,
@@ -29,9 +15,9 @@ import { staticTests } from "./staticTests";
 import { TavilySearchAPIRetriever } from "@langchain/community/retrievers/tavily_search_api";
 import { searchAndGetLinks } from "../tavily-request";
 import { crawlAndExtractApiEndpoints } from "../api-web-crawler";
-
-// Model type
-const modelType = "gpt-4o";
+import { createAgent, modelType } from "./agents/agent";
+import type { AgentState } from "./agents/agent";
+import { reviewerFunc } from "./agents/reviewer";
 
 // Recursion Limit
 const NUM_CYCLES = 3;
@@ -63,32 +49,6 @@ const Tavily = {
   },
 };
 
-// const Tavily = {
-//   search: async function(query: string) {
-//     return null;
-//   }
-// };
-// const Tavily = {
-//   retriever: new TavilySearchAPIRetriever({ k: 3 }),
-//
-//   search: async function(query: string) {
-//     console.log("TAVILY CALLED");
-//     try {
-//       const retrievedDocs = await this.retriever.invoke(query);
-//       console.log({ retrievedDocs });
-//
-//       // Process the retrieved documents to extract relevant information
-//       const relevantInfo = retrievedDocs.map(doc => doc.pageContent).join("\n");
-//
-//       return `Additional information for ${query}: ${relevantInfo}`;
-//     } catch (error) {
-//       console.error("Error calling Tavily:", error);
-//       return `Error retrieving additional information for ${query}: ${error.message}`;
-//     }
-//   }
-// };
-//
-
 const Windmill = {
   submitToHub: (code: string, tests: string) => {
     console.log("SUBMITTED TO WINDMILL");
@@ -100,65 +60,7 @@ const Windmill = {
   },
 };
 
-// Agent creation helper
-async function createAgent(
-  name: string,
-  systemMessage: string,
-  modelType: string,
-): Promise<Runnable> {
-  let llm: BaseChatModel;
-
-  switch (modelType) {
-    case "gpt-3.5-turbo":
-    case "gpt-3.5-turbo-16k":
-    case "gpt-4":
-    case "gpt-4-turbo":
-    case "gpt-4-turbo-2024-04-09":
-    case "gpt-4o":
-    case "gpt-4o-2024-05-13":
-      llm = new ChatOpenAI({
-        modelName: modelType,
-        temperature: 0,
-      });
-      break;
-    case "llama3-8b-8192":
-    case "llama3-70b-8192":
-    case "mixtral-8x7b-32768":
-    case "gemma-7b-it":
-    case "gemma2-9b-it":
-      llm = new ChatGroq({
-        modelName: modelType,
-        temperature: 0,
-      });
-      break;
-    default:
-      llm = new ChatGroq({
-        modelName: "llama3-70b-8192",
-        temperature: 0,
-      });
-      break;
-  }
-
-  const prompt = ChatPromptTemplate.fromMessages([
-    ["system", systemMessage],
-    ["human", "{input}"],
-  ]);
-
-  return prompt.pipe(llm);
-}
-
 // Create agents
-const reviewer = await createAgent(
-  "Reviewer",
-  `
-  You are a code reviewer.
-  Your job is to analyze code, tests, and test results.
-  You do not write code.
-  You decide if the code meets the requirements and is ready for submission, or if it needs more work.
-  `,
-  modelType,
-);
-// const codeGenerator = await createAgent("CodeGenerator", "You are a code generator. You create code based on requirements.", "groq");
 const codeGenerator = await createAgent(
   "CodeGenerator",
   codeGeneratorSystemPrompt,
@@ -171,22 +73,6 @@ const testGenerator = await createAgent(
     .replace("{dependencies}", getDependencies().toString()),
   modelType,
 );
-
-// Define state
-interface AgentState {
-  messages: BaseMessage[];
-  sender: string;
-  code?: string;
-  tests?: string;
-  testResults?: string;
-  staticTestResults?: string;
-  genTestResults?: string;
-  task: string;
-  integration: string;
-  additionalInfo?: string;
-  submitted?: boolean;
-  reviewed?: boolean;
-}
 
 // Create the graph
 const workflow = new StateGraph<AgentState>({
@@ -207,64 +93,7 @@ const workflow = new StateGraph<AgentState>({
 });
 
 // Add nodes
-workflow.addNode("Reviewer", async (state) => {
-  console.log("Reviewer Agent called");
-
-  let newState: Partial<AgentState> = {
-    ...state,
-    sender: "Reviewer",
-    reviewed: true,
-  };
-
-  if (state.code && state.tests && state.testResults) {
-    const input = `
-      Review the following for integration: ${state.integration}, task: ${state.task}\n
-      Code: ${state.code}\n
-      Tests: ${state.tests}\n
-      Test Results: ${state.testResults}\n
-      Static Test Results: ${state.staticTestResults}\n
-      Generated Test Results: ${state.genTestResults}\n
-      Decide if this is ready to submit or needs more work.
-      The code should be functional and the test should validate its functionality.
-      Don't bother with comments, best developer practices and documentation.
-      Just make sure it does what it says on the tin.
-      Make sure the test is executable.
-      Respond with VALIDATED if it's ready to submit, or NEEDS_WORK if it needs improvements.`;
-
-    const result = await reviewer.invoke({
-      input: input,
-    });
-
-    // console.log(result.content);
-    // console.log(input);
-
-    // console.log(result.content);
-
-    if (result.content.includes("VALIDATED")) {
-      const windmillResult = Windmill.submitToHub(state.code, state.tests);
-      newState.submitted = true;
-    } else if (result.content.includes("NEEDS_WORK")) {
-      const tavilyResult = await Tavily.search(
-        `${state.integration} ${state.task} API endpoints`,
-      );
-
-      // console.log("HERE IS WHAT I HAVE FOUND");
-      // console.log(tavilyResult);
-      newState.additionalInfo = tavilyResult;
-
-      // Reset the state values
-      newState.code = undefined;
-      newState.tests = undefined;
-      newState.staticTestResults = undefined;
-      newState.genTestResults = undefined;
-      newState.testResults = undefined;
-      newState.submitted = false;
-      newState.reviewed = true;
-    }
-  }
-
-  return newState;
-});
+workflow.addNode("Reviewer", reviewerFunc);
 
 workflow.addNode("CodeGenerator", async (state) => {
   console.log("CodeGenerator Agent called");
@@ -455,27 +284,6 @@ function router(state: AgentState) {
       return "CodeGenerator";
   }
 }
-
-// function router(state: AgentState) {
-//   if (state.submitted) {
-//     console.log("WE ARE DONE");
-//     return "end";
-//   }
-//
-//   if (!state.code) {
-//     return "CodeGenerator";
-//   }
-//
-//   if (!state.tests || !state.testResults || !state.staticTestResults || !state.genTestResults) {
-//     return "TestGenerator";
-//   }
-//
-//   if (!state.reviewed) {
-//     return "Reviewer";
-//   }
-//
-//   return "CodeGenerator";
-// }
 
 // Define edges with the router
 workflow.addConditionalEdges("Reviewer", router, {
