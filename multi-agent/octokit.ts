@@ -12,7 +12,7 @@ const octokit = new Octokit({ auth: token });
 
 async function findScriptInRepoRecursive(
   directoryPath: string,
-  scriptFilename: string
+  scriptFilename: string,
 ): Promise<string | null> {
   try {
     const { data: contents } = await octokit.rest.repos.getContent({
@@ -41,7 +41,10 @@ async function findScriptInRepoRecursive(
         }
       } else if (item.type === "dir") {
         // Recursively search in subdirectory
-        const result = await findScriptInRepoRecursive(item.path, scriptFilename);
+        const result = await findScriptInRepoRecursive(
+          item.path,
+          scriptFilename,
+        );
         if (result) return result;
       }
     }
@@ -53,14 +56,16 @@ async function findScriptInRepoRecursive(
   }
 }
 
-async function findMultipleScripts(integration: string): Promise<Map<string, string>> {
+async function findMultipleScripts(
+  integration: string,
+): Promise<Map<string, string>> {
   const results = new Map<string, string>();
   const basePathPrefix = `packages/pieces/community/${integration}/`;
 
   // Get index.ts from ${integration}/src
   const indexContent = await findScriptInRepoRecursive(
     `packages/pieces/community/${integration}/src`,
-    "index.ts"
+    "index.ts",
   );
   if (indexContent) {
     results.set("src/index.ts", indexContent);
@@ -84,7 +89,9 @@ async function findMultipleScripts(integration: string): Promise<Map<string, str
           });
 
           if ("content" in fileContent) {
-            const content = Buffer.from(fileContent.content, "base64").toString("utf-8");
+            const content = Buffer.from(fileContent.content, "base64").toString(
+              "utf-8",
+            );
             const relativePath = item.path.replace(basePathPrefix, "");
             results.set(relativePath, content);
           }
@@ -98,28 +105,31 @@ async function findMultipleScripts(integration: string): Promise<Map<string, str
   return results;
 }
 
-export async function getActivePiecesScripts(integration: string, task: string): Promise<string> {
+export async function getActivePiecesScripts(
+  integration: string,
+  task: string,
+): Promise<string> {
   let output = "";
 
   // Find the specific task script
   const taskScript = await findScriptInRepoRecursive(
     `packages/pieces/community/${integration}`,
-    `${task}.ts`
+    `${task}.ts`,
   );
-  
+
   if (taskScript) {
-    output += `${integration} ${task}.ts script:\n\n${taskScript}`;
+    output += `${integration} ${task}.ts script:\n${taskScript}`;
   } else {
     output += `${integration} ${task}.ts script not found`;
   }
-  
+
   output += "\n\n--- Separator between task script and other scripts ---\n\n";
 
   // Find other scripts
   const scripts = await findMultipleScripts(integration);
-  
+
   for (const [filepath, content] of scripts.entries()) {
-    output += `File: ${filepath}\n\n`;
+    output += `File: ${filepath}\n`;
     output += content;
     output += "\n\n--- End of file ---\n\n";
   }
@@ -127,10 +137,40 @@ export async function getActivePiecesScripts(integration: string, task: string):
   return output;
 }
 
+// New function to get available scripts for an integration
+export async function getAvailableScripts(
+  integration: string,
+): Promise<string[]> {
+  try {
+    const { data: contents } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: `packages/pieces/community/${integration}/src/lib/actions`,
+    });
+
+    if (!Array.isArray(contents)) {
+      throw new Error("Contents are not an array");
+    }
+
+    return contents
+      .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
+      .map((item) => item.name.replace(".ts", ""));
+  } catch (error) {
+    console.error(
+      `Error fetching available scripts for ${integration}:`,
+      error,
+    );
+    return [];
+  }
+}
+
 // Usage example:
 async function main() {
   const output = await getActivePiecesScripts("clarifai", "ask-llm");
   console.log(output);
+
+  const availableScripts = await getAvailableScripts("clarifai");
+  console.log("Available scripts for clarifai:", availableScripts);
 }
 
-// main().catch(console.error);
+main().catch(console.error);
