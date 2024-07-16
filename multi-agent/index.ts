@@ -1,7 +1,7 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
 import { staticTests } from "./staticTests";
-import type { AgentState } from "./agents/agent";
-import { reviewerFunc } from "./agents/reviewer";
+import type { AgentState } from "./agents/Agent";
+import { reviewerFunc } from "./agents/Reviewer";
 import { codeGenFunc } from "./agents/CodeGenerator";
 import { testGenFunc } from "./agents/TestGenerator";
 

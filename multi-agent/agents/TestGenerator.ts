@@ -1,6 +1,5 @@
-import type { AgentState } from "./agent";
-import { createAgent, modelType } from "./agent";
-import { testGeneratorUserPrompt, testGeneratorSystemPrompt } from "../prompts";
+import type { AgentState } from "./Agent";
+import { createAgent, modelType } from "./Agent";
 import { getEnvVariableNames, getDependencies } from "../read-local";
 import { getActivePiecesScripts } from "../octokit";
 import * as fs from "fs/promises";
@@ -9,11 +8,44 @@ import { spawnSync } from "child_process";
 
 const testGenerator = await createAgent(
   "TestGenerator",
-  testGeneratorSystemPrompt
-    .replace("{envVariables}", getEnvVariableNames().toString())
-    .replace("{dependencies}", getDependencies().toString()),
+  `
+  You are a test generator for TypeScript code running on the Bun runtime.
+  Your task is to create a single, self-sufficient script that tests the given input code.
+
+  Key requirements:
+  1. The test must verify that the code accomplishes the specified task.
+  2. Use only the available environment variables and dependencies listed below.
+  3. Ensure all parameters are valid and the code is runnable.
+  4. The test should not contain any placeholder variables or mock values that have to be replaced manually.
+  5. If resources are needed, use the API to create them within the test.
+  6. The test must be runnable without human intervention.
+
+  Available environment variables:
+  ${getEnvVariableNames().toString()}
+
+  Available dependencies:
+  ${getDependencies().toString()}
+
+  The code to be tested is in 'generated-code.ts' in the current working directory.
+  `,
   modelType,
 );
+
+const userPrompt = `
+  Generate a test for a script that does {task} in {integration}.
+  Here is the code we will be testing:
+  {generatedCode}
+
+  You can find the necessary endpoints/logic in here:
+  {activePiecesPrompt}
+
+  Don't use any external libraries that you don't really need.
+  The libraries you have are already listed in the system prompt for you.
+  Make sure the code is runnable.
+  Don't use placeholder variables: no one will replace them.
+  If you need to find some value, make sure the code retrieves it using the API.
+  Make sure that all the key requirements are met.
+  `;
 
 export async function testGenFunc(
   state: AgentState,
@@ -24,13 +56,15 @@ export async function testGenFunc(
   let attempt = 0;
   let tests = "";
   let isSelfSufficient = false;
+  let executionSuccessful = false;
   let feedback = "";
+  let executionResult: any;
 
-  while (attempt < maxAttempts && !isSelfSufficient) {
+  while (attempt < maxAttempts && (!isSelfSufficient || !executionSuccessful)) {
     attempt++;
     console.log(`Test generation attempt ${attempt}`);
 
-    let input = testGeneratorUserPrompt
+    let input = userPrompt
       .replace("{task}", state.task)
       .replace("{integration}", state.integration)
       .replace("{generatedCode}", state.code!)
@@ -44,7 +78,10 @@ export async function testGenFunc(
     }
 
     if (attempt > 1) {
-      input += `\n\nPrevious attempt was not self-sufficient or failed to execute. Please address the following feedback and ensure the test code is completely self-sufficient, without any placeholders or mock values that require human intervention:\n${feedback}`;
+      input += `
+      Previous attempt was not self-sufficient or failed to execute.
+      Please address the following feedback and ensure the test code is completely self-sufficient,
+      without any placeholders or mock values that require human intervention:\n${feedback}`;
     }
 
     const result = await testGenerator.invoke({
@@ -57,7 +94,7 @@ export async function testGenFunc(
     // Check if it's self-sufficient
     const checkResult = await testGenerator.invoke({
       input:
-        testGeneratorUserPrompt
+        userPrompt
           .replace("{task}", state.task)
           .replace("{integration}", state.integration)
           .replace("{generatedCode}", state.code!)
@@ -68,23 +105,25 @@ export async function testGenFunc(
         `Is the following test code self-sufficient?
          Is it free from variables that have to be replaced by a human so that the tests can be run?
          Does it have all the resources it needs (it acquired them, created them or found the necessary credentials in these env variables)?
-         ${getDependencies()}
+         You only have these variables at your disposal:
+         ${getEnvVariableNames().toString()}
+
          Does it remove the resources it created?
          If you said YES to all these questions, say FINAL and provide the final code in a typescript code block.
          If not, say NEEDS WORK and explain in detail what has to be changed so that the code becomes self-sufficient.
 
-      Test:
-      ${tests}
+        Test:
+        ${tests}
 
-      - END OF TEST -
+        - END OF TEST -
 
-      If it's self-sufficient, say FINAL and provide the final code in a typescript code block.
-      If it can be run using these env variables, say FINAL and provide the final code in a typescript code block:
-      ${getEnvVariableNames()}
+        If it's self-sufficient, say FINAL and provide the final code in a typescript code block.
+        If it can be run using these env variables, say FINAL and provide the final code in a typescript code block:
+        ${getEnvVariableNames().toString()}
     `,
     });
 
-    // console.log(checkResult.content);
+    console.log(checkResult.content);
 
     isSelfSufficient = checkResult.content.includes("FINAL");
 
@@ -100,44 +139,45 @@ export async function testGenFunc(
         isSelfSufficient = false;
         continue;
       }
+
+      // Write the tests to a local file
+      try {
+        const filePath = path.join(process.cwd(), "generated-tests.ts");
+        await fs.writeFile(filePath, tests, "utf8");
+        console.log(`Generated tests have been written to ${filePath}`);
+      } catch (error) {
+        console.error("Error writing generated tests to file:", error);
+        isSelfSufficient = false;
+        continue;
+      }
+
+      // Try to execute the tests
+      try {
+        executionResult = spawnSync("bun", ["run", "generated-tests.ts"], {
+          encoding: "utf8",
+          stdio: "pipe",
+          env: process.env, // Pass through the current environment variables
+        });
+
+        console.log("Test execution output:", executionResult.stdout);
+        console.error("Test execution errors:", executionResult.stderr);
+
+        // Check if anything was printed to STDERR
+        if (executionResult.stderr && executionResult.stderr.trim() !== "") {
+          throw new Error("Execution produced output to STDERR");
+        }
+
+        // If we reach here, execution was successful
+        executionSuccessful = true;
+      } catch (error) {
+        console.error(`Error executing tests: ${error}`);
+        feedback = `Test execution failed. Error: ${error}\nStdout: ${executionResult?.stdout}\nStderr: ${executionResult?.stderr}`;
+        isSelfSufficient = false;
+        executionSuccessful = false;
+      }
     } else {
       feedback = checkResult.content.replace("NEEDS WORK", "").trim();
-      // console.log(`Test code not self-sufficient. Feedback: ${feedback}`);
       continue;
-    }
-
-    // Write the tests to a local file
-    try {
-      const filePath = path.join(process.cwd(), "generated-tests.ts");
-      await fs.writeFile(filePath, tests, "utf8");
-      console.log(`Generated tests have been written to ${filePath}`);
-    } catch (error) {
-      console.error("Error writing generated tests to file:", error);
-      isSelfSufficient = false;
-      continue;
-    }
-
-    // Try to execute the tests
-    let executionResult;
-    try {
-      executionResult = spawnSync("bun", ["run", "generated-tests.ts"], {
-        encoding: "utf8",
-        stdio: "pipe",
-        env: process.env, // Pass through the current environment variables
-      });
-
-      // console.log("Test execution output:", executionResult.stdout);
-      // console.error("Test execution errors:", executionResult.stderr);
-
-      if (executionResult.status !== 0) {
-        throw new Error(
-          `Execution failed with status ${executionResult.status}`,
-        );
-      }
-    } catch (error) {
-      console.error(`Error executing tests: ${error}`);
-      feedback = `Test execution failed. Error: ${error}\nStdout: ${executionResult?.stdout}\nStderr: ${executionResult?.stderr}`;
-      isSelfSufficient = false;
     }
   }
 
@@ -145,10 +185,13 @@ export async function testGenFunc(
     ...state,
     sender: "TestGenerator",
     tests: tests,
-    testResults: isSelfSufficient
-      ? "Self-sufficient tests generated and executed successfully."
-      : "Could not generate self-sufficient and executable tests after maximum attempts.",
-    isSelfSufficient: isSelfSufficient,
+    testResults:
+      isSelfSufficient && executionSuccessful
+        ? "Self-sufficient tests generated and executed successfully without STDERR output."
+        : "Could not generate self-sufficient and executable tests without STDERR output after maximum attempts.",
+    isSelfSufficient: isSelfSufficient && executionSuccessful,
     testGenerationFeedback: feedback,
+    stdout: executionSuccessful ? executionResult?.stdout : undefined,
+    stderr: executionSuccessful ? executionResult?.stderr : undefined,
   };
 }

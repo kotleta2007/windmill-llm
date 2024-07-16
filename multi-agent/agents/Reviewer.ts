@@ -1,5 +1,5 @@
-import type { AgentState } from "./agent";
-import { createAgent, modelType } from "./agent";
+import type { AgentState } from "./Agent";
+import { createAgent, modelType } from "./Agent";
 import { Windmill } from "../tools/Windmill";
 import { Tavily } from "../tools/Tavily";
 
