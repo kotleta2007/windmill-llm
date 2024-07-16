@@ -12,60 +12,15 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import { staticTests } from "./staticTests";
-import { TavilySearchAPIRetriever } from "@langchain/community/retrievers/tavily_search_api";
-import { searchAndGetLinks } from "../tavily-request";
-import { crawlAndExtractApiEndpoints } from "../api-web-crawler";
 import { createAgent, modelType } from "./agents/agent";
 import type { AgentState } from "./agents/agent";
 import { reviewerFunc } from "./agents/reviewer";
+import { codeGenFunc } from "./agents/CodeGenerator";
 
 // Recursion Limit
 const NUM_CYCLES = 3;
 
-// Dummy functions for external services
-const Tavily = {
-  search: async function (query: string) {
-    console.log(`Tavily search called with query: ${query}`);
-    try {
-      const links = await searchAndGetLinks(query);
-      console.log("Crawling links for API endpoints...");
-      const endpointMap = await crawlAndExtractApiEndpoints(links);
-
-      let result = `Search results for query: ${query}\n\n`;
-
-      for (const [link, endpoints] of endpointMap) {
-        result += `Endpoints found in ${link}:\n`;
-        endpoints.forEach((endpoint) => {
-          result += `  ${endpoint.method} ${endpoint.path}\n`;
-        });
-        result += "\n";
-      }
-
-      return result;
-    } catch (error) {
-      console.error("Error in Tavily search:", error);
-      return `Error occurred during search: ${error.message}`;
-    }
-  },
-};
-
-const Windmill = {
-  submitToHub: (code: string, tests: string) => {
-    console.log("SUBMITTED TO WINDMILL");
-    // console.log("Here is the code")
-    // console.log(code)
-    // console.log("Here are the tests")
-    // console.log(tests)
-    return "Successfully submitted to Windmill Hub";
-  },
-};
-
 // Create agents
-const codeGenerator = await createAgent(
-  "CodeGenerator",
-  codeGeneratorSystemPrompt,
-  modelType,
-);
 const testGenerator = await createAgent(
   "TestGenerator",
   testGeneratorSystemPrompt
@@ -94,40 +49,7 @@ const workflow = new StateGraph<AgentState>({
 
 // Add nodes
 workflow.addNode("Reviewer", reviewerFunc);
-
-workflow.addNode("CodeGenerator", async (state) => {
-  console.log("CodeGenerator Agent called");
-
-  let input = codeGeneratorUserPrompt
-    .replace("{integration}", state.integration)
-    .replace("{task}", state.task)
-    .replace("{example}", exampleWindmillScript)
-    .replace(
-      "{activePiecesPrompt}",
-      await getActivePiecesScripts(state.integration, state.task),
-    );
-
-  if (state.additionalInfo) {
-    input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
-  }
-
-  const result = await codeGenerator.invoke({
-    input: input,
-  });
-  const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
-  const code = match?.[1] || "";
-
-  // Write the code to a local file
-  try {
-    const filePath = path.join(process.cwd(), "generated-code.ts");
-    await fs.writeFile(filePath, code, "utf8");
-    console.log(`Generated code has been written to ${filePath}`);
-  } catch (error) {
-    console.error("Error writing generated code to file:", error);
-  }
-
-  return { ...state, sender: "CodeGenerator", code: code };
-});
+workflow.addNode("CodeGenerator", codeGenFunc);
 
 workflow.addNode("TestGenerator", async (state) => {
   console.log("TestGenerator Agent called");

@@ -1,5 +1,7 @@
 import type { AgentState } from "./agent";
 import { createAgent, modelType } from "./agent";
+import { Windmill } from "../tools/Windmill";
+import { Tavily } from "../tools/Tavily";
 
 const reviewer = await createAgent(
   "Reviewer",
