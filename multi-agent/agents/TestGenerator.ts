@@ -102,15 +102,16 @@ export async function testGenFunc(
             "{activePiecesPrompt}",
             await getActivePiecesScripts(state.integration, state.task),
           ) +
-        `Is the following test code self-sufficient?
-         Is it free from variables that have to be replaced by a human so that the tests can be run?
-         Does it have all the resources it needs (it acquired them, created them or found the necessary credentials in these env variables)?
-         You only have these variables at your disposal:
-         ${getEnvVariableNames().toString()}
+        `
+        Is the following test code self-sufficient?
+        Is it free from variables that have to be replaced by a human so that the tests can be run?
+        Does it have all the resources it needs (it acquired them, created them or found the necessary credentials in these env variables)?
+        You only have these variables at your disposal:
+        ${getEnvVariableNames().toString()}
 
-         Does it remove the resources it created?
-         If you said YES to all these questions, say FINAL and provide the final code in a typescript code block.
-         If not, say NEEDS WORK and explain in detail what has to be changed so that the code becomes self-sufficient.
+        Does it remove the resources it created?
+        If you said YES to all these questions, say FINAL and provide the final code in a typescript code block.
+        If not, say NEEDS WORK and explain in detail what has to be changed so that the code becomes self-sufficient.
 
         Test:
         ${tests}
@@ -120,6 +121,8 @@ export async function testGenFunc(
         If it's self-sufficient, say FINAL and provide the final code in a typescript code block.
         If it can be run using these env variables, say FINAL and provide the final code in a typescript code block:
         ${getEnvVariableNames().toString()}
+        Else, say NEEDS WORK.
+        Your response must end with either FINAL or NEEDS WORK.
     `,
     });
 

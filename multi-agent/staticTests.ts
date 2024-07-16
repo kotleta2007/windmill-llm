@@ -1,8 +1,8 @@
-import * as ts from 'typescript';
-import { file } from 'bun';
+import * as ts from "typescript";
+import { file } from "bun";
 
 export async function staticTests(filePath: string): Promise<string> {
-  let results = '';
+  let results = "";
 
   // Test 1: Check if the file contains valid TypeScript code
   async function checkValidTypeScript(): Promise<void> {
@@ -12,17 +12,20 @@ export async function staticTests(filePath: string): Promise<string> {
         filePath,
         fileContent,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       const syntaxErrors = sourceFile.parseDiagnostics;
 
       if (syntaxErrors.length === 0) {
-        results += "Syntax Test Passed: File contains valid TypeScript syntax.\n";
+        results +=
+          "Syntax Test Passed: File contains valid TypeScript syntax.\n";
       } else {
-        const errorMessages = syntaxErrors.map(error => 
-          ts.flattenDiagnosticMessageText(error.messageText, "\n")
-        ).join("\n");
+        const errorMessages = syntaxErrors
+          .map((error) =>
+            ts.flattenDiagnosticMessageText(error.messageText, "\n"),
+          )
+          .join("\n");
         results += `Syntax Test Failed: TypeScript syntax errors found:\n${errorMessages}\n`;
       }
     } catch (error) {
@@ -34,16 +37,18 @@ export async function staticTests(filePath: string): Promise<string> {
   async function checkURLs(): Promise<void> {
     try {
       const fileContent = await file(filePath).text();
-      const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
-      const stringLiteralRegex = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
+      const urlRegex =
+        /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
+      const stringLiteralRegex =
+        /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
 
       let validURLs = 0;
       let invalidURLs = 0;
 
       let match;
       while ((match = stringLiteralRegex.exec(fileContent)) !== null) {
-        const stringLiteral = match[0].slice(1, -1);  // Remove quotes
-        if (stringLiteral.includes('http')) {
+        const stringLiteral = match[0].slice(1, -1); // Remove quotes
+        if (stringLiteral.includes("http")) {
           if (urlRegex.test(stringLiteral)) {
             validURLs++;
           } else {
@@ -76,3 +81,4 @@ export async function staticTests(filePath: string): Promise<string> {
 
 // Usage example:
 // staticTests('/path/to/your/typescript/file.ts').then(console.log);import * as ts from 'typescript';
+// console.log(await staticTests("generated-tests.ts"));

@@ -94,16 +94,6 @@ async function runWorkflow(integration: string, task: string) {
   // console.log(JSON.stringify(result, null, 2));
 }
 
-// Example usage
-// runWorkflow("claude", "send-prompt");
-// runWorkflow("github", "create-comment-on-an-issue");
-//
-// runWorkflow("clarifai", "ask-llm");
-// runWorkflow("binance", "fetch-pair-price");
-// runWorkflow("deepl", "translate-text");
-// runWorkflow("hackernews", "top-stories-in-hackernews");
-// runWorkflow("straico", "prompt-completion");
-
 async function main() {
   // Get command line arguments
   const args = process.argv.slice(2); // Remove the first two elements (node and script name)
@@ -136,3 +126,17 @@ main().catch((error) => {
   console.error("Unhandled error:", error);
   process.exit(1);
 });
+
+// Example usage:
+// claude send-prompt
+
+// bun run multi-agent/index.ts clarifai ask-llm
+// bun run multi-agent/index.ts binance fetch-pair-price
+// bun run multi-agent/index.ts deepl translate-text
+// bun run multi-agent/index.ts hackernews top-stories-in-hackernews
+// bun run multi-agent/index.ts straico prompt-completion
+// bun run multi-agent/index.ts github create-comment-on-issue
+// bun run multi-agent/index.ts github create-issue
+// bun run multi-agent/index.ts github get-issue-information
+// bun run multi-agent/index.ts github lock-issue
+// bun run multi-agent/index.ts github unlock-issue
