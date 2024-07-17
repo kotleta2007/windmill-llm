@@ -151,7 +151,7 @@ async function main() {
     // Process each script
     for (const script of availableScripts) {
       console.log(`Processing script: ${script}`);
-      runWorkflow(integration, script);
+      await runWorkflow(integration, script);
     }
 
     console.log(`Finished processing all scripts for ${integration}`);
