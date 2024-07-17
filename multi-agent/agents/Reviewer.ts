@@ -50,7 +50,12 @@ export async function reviewerFunc(
     // console.log(result.content);
 
     if (result.content.includes("VALIDATED")) {
-      const windmillResult = Windmill.submitToHub(state.code, state.tests);
+      const windmillResult = Windmill.submitToHub(
+        state.integration,
+        state.task,
+        state.code,
+      );
+      console.log(windmillResult);
       newState.submitted = true;
     } else if (result.content.includes("NEEDS_WORK")) {
       const tavilyResult = await Tavily.search(

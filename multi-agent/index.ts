@@ -4,6 +4,8 @@ import type { AgentState } from "./agents/Agent";
 import { reviewerFunc } from "./agents/Reviewer";
 import { codeGenFunc } from "./agents/CodeGenerator";
 import { testGenFunc } from "./agents/TestGenerator";
+import { main } from "bun";
+import { getAllAvailableScripts } from "./octokit";
 
 // Recursion Limit
 const NUM_CYCLES = 3;
@@ -94,7 +96,7 @@ async function runWorkflow(integration: string, task: string) {
   // console.log(JSON.stringify(result, null, 2));
 }
 
-async function main() {
+async function integrationAndTask() {
   // Get command line arguments
   const args = process.argv.slice(2); // Remove the first two elements (node and script name)
 
@@ -121,11 +123,46 @@ async function main() {
   }
 }
 
-// Run the main function
-main().catch((error) => {
-  console.error("Unhandled error:", error);
-  process.exit(1);
-});
+// integrationAndTask().catch((error) => {
+//   console.error("Unhandled error:", error);
+//   process.exit(1);
+// });
+
+async function main() {
+  // Get command line arguments
+  const args = process.argv.slice(2); // Remove the first two elements (node and script name)
+
+  // Check if we have the correct number of arguments
+  if (args.length !== 1) {
+    console.error("Usage: bun run index.ts <integration>");
+    process.exit(1);
+  }
+
+  // Extract integration from arguments
+  const [integration] = args;
+
+  // Log the input
+  console.log(`Processing scripts for integration: ${integration}`);
+
+  try {
+    // Get all available scripts for the integration
+    const availableScripts = await getAllAvailableScripts(integration);
+
+    // Process each script
+    for (const script of availableScripts) {
+      console.log(`Processing script: ${script}`);
+      runWorkflow(integration, script);
+    }
+
+    console.log(`Finished processing all scripts for ${integration}`);
+  } catch (error) {
+    console.error("Error processing scripts:", error);
+    process.exit(1);
+  }
+}
+
+// Call the main function
+main();
 
 // Example usage:
 // claude send-prompt

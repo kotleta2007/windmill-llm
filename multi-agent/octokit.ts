@@ -138,7 +138,7 @@ export async function getActivePiecesScripts(
 }
 
 // New function to get available scripts for an integration
-export async function getAvailableScripts(
+export async function getAllAvailableScripts(
   integration: string,
 ): Promise<string[]> {
   try {
@@ -169,8 +169,8 @@ async function main() {
   const output = await getActivePiecesScripts("clarifai", "ask-llm");
   console.log(output);
 
-  const availableScripts = await getAvailableScripts("clarifai");
+  const availableScripts = await getAllAvailableScripts("clarifai");
   console.log("Available scripts for clarifai:", availableScripts);
 }
 
-main().catch(console.error);
+// main().catch(console.error);
