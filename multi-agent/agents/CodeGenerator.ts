@@ -11,6 +11,7 @@ export const codeGenerator = await createAgent(
   Return the action result.
   You should use fetch and are not allowed to import any libraries.
   Define a type which contains the authentication information and only that.
+  The name of the type should be the capitalized name of the integration.
   If you don't need any authentication, don't define a type!
   Handle errors.
 
@@ -31,6 +32,9 @@ export async function codeGenFunc(
 
   let input = `
     Generate a standalone script that does {task} in {integration}.
+
+    Integration name: {integration}.
+
     Your code should look like this:
     {example}.
     You can find the necessary endpoints/logic in here:
