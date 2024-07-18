@@ -2,26 +2,47 @@ import * as fs from "fs";
 import * as path from "path";
 
 export const Windmill = {
-  submitToHub: (integration: string, task: string, code: string) => {
+  submitToHub: (
+    integration: string,
+    task: string,
+    code: string,
+    tests: string,
+    schema: string,
+  ) => {
     const hubDir = "hub";
     const integrationDir = path.join(hubDir, integration);
-    const filePath = path.join(integrationDir, `${task}.ts`);
+    const scriptsDir = path.join(integrationDir, "scripts", "action", task);
+    const codeFilePath = path.join(scriptsDir, "script.fetch.ts");
+    const testsFilePath = path.join(scriptsDir, "script.test.ts");
+    const schemaFilePath = path.join(scriptsDir, "schema.json");
 
-    // Create the hub directory if it doesn't exist
-    if (!fs.existsSync(hubDir)) {
-      fs.mkdirSync(hubDir);
-    }
-
-    // Create the integration subdirectory if it doesn't exist
-    if (!fs.existsSync(integrationDir)) {
-      fs.mkdirSync(integrationDir);
-    }
+    // Create directories if they don't exist
+    [
+      hubDir,
+      integrationDir,
+      path.join(integrationDir, "scripts"),
+      path.join(integrationDir, "scripts", "action"),
+      scriptsDir,
+    ].forEach((dir) => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
 
     // Write the code to the file
-    fs.writeFileSync(filePath, code);
+    fs.writeFileSync(codeFilePath, code);
 
-    console.log(`SUBMITTED TO WINDMILL: ${filePath}`);
+    // Write the tests to the file
+    fs.writeFileSync(testsFilePath, tests);
 
-    return "Successfully submitted to Windmill Hub";
+    // Write the schema to the file
+    fs.writeFileSync(schemaFilePath, schema);
+
+    console.log(`SUBMITTED TO WINDMILL:`);
+    console.log(`Code: ${codeFilePath}`);
+    console.log(`Tests: ${testsFilePath}`);
+    console.log(`Schema: ${schemaFilePath}`);
+
+    return "Successfully submitted code, tests, and schema to Windmill Hub";
   },
 };

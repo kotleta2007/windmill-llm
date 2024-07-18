@@ -54,6 +54,8 @@ export async function reviewerFunc(
         state.integration,
         state.task,
         state.code,
+        state.tests,
+        state.schema,
       );
       console.log(windmillResult);
       newState.submitted = true;

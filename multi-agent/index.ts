@@ -16,6 +16,7 @@ const workflow = new StateGraph<AgentState>({
     messages: { value: (x, y) => (x ?? []).concat(y ?? []) },
     sender: { value: (x, y) => y ?? x ?? "user" },
     code: { value: (x, y) => y ?? x },
+    schema: { value: (x, y) => y ?? x },
     tests: { value: (x, y) => y ?? x },
     staticTestResults: { value: (x, y) => y ?? x },
     genTestResults: { value: (x, y) => y ?? x },

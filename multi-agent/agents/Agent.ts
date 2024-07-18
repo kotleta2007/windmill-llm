@@ -61,6 +61,7 @@ export interface AgentState {
   sender: string;
   code?: string;
   tests?: string;
+  schema?: string;
   testResults?: string;
   staticTestResults?: string;
   genTestResults?: string;

@@ -13,6 +13,7 @@ export const codeGenerator = await createAgent(
   Define a type which contains the authentication information and only that.
   The name of the type should be the capitalized name of the integration.
   If you don't need any authentication, don't define a type!
+  Return the type after the code encoded as a JSON schema.
   Handle errors.
 
   Here's how interactions have to look like:
@@ -20,6 +21,11 @@ export const codeGenerator = await createAgent(
   assistant: \`\`\`typescript
   [code]
   \`\`\`
+
+  \`\`\`json
+  [schema of resource type]
+  \`\`\`
+
   Check that the returned code adheres to this format.
   `,
   modelType,
@@ -58,6 +64,9 @@ export async function codeGenFunc(
   const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
   const code = match?.[1] || "";
 
+  const matchJSON = result.content.match(/```json\n([\s\S]*?)\n```/);
+  const json = matchJSON?.[1] || "";
+
   // Write the code to a local file
   try {
     const filePath = path.join(process.cwd(), "generated-code.ts");
@@ -67,7 +76,7 @@ export async function codeGenFunc(
     console.error("Error writing generated code to file:", error);
   }
 
-  return { ...state, sender: "CodeGenerator", code: code };
+  return { ...state, sender: "CodeGenerator", code: code, schema: json };
 }
 
 const exampleWindmillScript = `
