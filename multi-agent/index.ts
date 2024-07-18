@@ -4,7 +4,7 @@ import type { AgentState } from "./agents/Agent";
 import { reviewerFunc } from "./agents/Reviewer";
 import { codeGenFunc } from "./agents/CodeGenerator";
 import { testGenFunc } from "./agents/TestGenerator";
-import { main } from "bun";
+import { supervisorFunc } from "./agents/Supervisor";
 import { getAllAvailableScripts } from "./octokit";
 
 // Recursion Limit
@@ -26,6 +26,12 @@ const workflow = new StateGraph<AgentState>({
     additionalInfo: { value: (x, y) => y ?? x },
     submitted: { value: (x, y) => y ?? x ?? false },
     reviewed: { value: (x, y) => y ?? x ?? false },
+    // New channels for Supervisor
+    supervisorState: {
+      value: (x, y) => y ?? x ?? { scripts: [], currentIndex: 0 },
+    },
+    complete: { value: (x, y) => y ?? x ?? false },
+    taskType: { value: (x, y) => y ?? x },
   },
 });
 
@@ -33,29 +39,41 @@ const workflow = new StateGraph<AgentState>({
 workflow.addNode("Reviewer", reviewerFunc);
 workflow.addNode("CodeGenerator", codeGenFunc);
 workflow.addNode("TestGenerator", testGenFunc);
+workflow.addNode("Supervisor", supervisorFunc);
 
 // Router function
 function router(state: AgentState) {
-  if (state.submitted) {
+  if (state.complete) {
     console.log("WE ARE DONE");
     return "end";
   }
 
   switch (state.sender) {
+    case "Supervisor":
+      return "CodeGenerator";
     case "CodeGenerator":
       return "TestGenerator";
     case "TestGenerator":
       return "Reviewer";
     case "Reviewer":
-      return "CodeGenerator";
+      return "Supervisor";
     default:
-      // If no sender is set (initial state) or unknown sender, start with CodeGenerator
-      return "CodeGenerator";
+      // If no sender is set (initial state) or unknown sender, start with Supervisor
+      return "Supervisor";
   }
 }
 
 // Define edges with the router
+workflow.addConditionalEdges("Supervisor", router, {
+  Supervisor: "Supervisor",
+  CodeGenerator: "CodeGenerator",
+  TestGenerator: "TestGenerator",
+  Reviewer: "Reviewer",
+  end: END,
+});
+
 workflow.addConditionalEdges("Reviewer", router, {
+  Supervisor: "Supervisor",
   CodeGenerator: "CodeGenerator",
   TestGenerator: "TestGenerator",
   Reviewer: "Reviewer",
@@ -63,6 +81,7 @@ workflow.addConditionalEdges("Reviewer", router, {
 });
 
 workflow.addConditionalEdges("CodeGenerator", router, {
+  Supervisor: "Supervisor",
   CodeGenerator: "CodeGenerator",
   TestGenerator: "TestGenerator",
   Reviewer: "Reviewer",
@@ -70,59 +89,88 @@ workflow.addConditionalEdges("CodeGenerator", router, {
 });
 
 workflow.addConditionalEdges("TestGenerator", router, {
+  Supervisor: "Supervisor",
   CodeGenerator: "CodeGenerator",
   TestGenerator: "TestGenerator",
   Reviewer: "Reviewer",
   end: END,
 });
 
-workflow.addEdge(START, "CodeGenerator");
+// NOT SURE IF WE NEED THIS
+// workflow.addConditionalEdges(
+//   "Supervisor",
+//   (state) => (state.complete ? "end" : "CodeGenerator"),
+//   {
+//     end: END,
+//     CodeGenerator: "CodeGenerator",
+//   },
+// );
+
+workflow.addEdge(START, "Supervisor");
+
+// DO WE NEED THIS????
+// // Update the edges
+// workflow.addEdge("Supervisor", "CodeGenerator");
+// workflow.addEdge("Reviewer", "Supervisor");
 
 // Compile the graph
 const graph = workflow.compile();
 
 // Run the graph
-async function runWorkflow(integration: string, task: string) {
+async function runWorkflow(integration: string) {
   const result = await graph.invoke(
     {
       integration: integration,
-      task: task,
     },
     {
-      recursionLimit: 3 * NUM_CYCLES + 1,
+      recursionLimit: 4 * NUM_CYCLES + 1,
     },
   );
 
   // console.log("Final Result:");
   // console.log(JSON.stringify(result, null, 2));
 }
+// async function runWorkflow(integration: string, task: string) {
+//   const result = await graph.invoke(
+//     {
+//       integration: integration,
+//       task: task,
+//     },
+//     {
+//       recursionLimit: 3 * NUM_CYCLES + 1,
+//     },
+//   );
 
-async function integrationAndTask() {
-  // Get command line arguments
-  const args = process.argv.slice(2); // Remove the first two elements (node and script name)
+// console.log("Final Result:");
+// console.log(JSON.stringify(result, null, 2));
+// }
 
-  // Check if we have the correct number of arguments
-  if (args.length !== 2) {
-    console.error("Usage: bun run index.ts <integration> <task>");
-    process.exit(1);
-  }
+// async function integrationAndTask() {
+//   // Get command line arguments
+//   const args = process.argv.slice(2); // Remove the first two elements (node and script name)
 
-  // Extract integration and task from arguments
-  const [integration, task] = args;
+//   // Check if we have the correct number of arguments
+//   if (args.length !== 2) {
+//     console.error("Usage: bun run index.ts <integration> <task>");
+//     process.exit(1);
+//   }
 
-  // Log the input
-  console.log(
-    `Running workflow for integration: ${integration}, task: ${task}`,
-  );
+//   // Extract integration and task from arguments
+//   const [integration, task] = args;
 
-  try {
-    // Run the workflow
-    runWorkflow(integration, task);
-  } catch (error) {
-    console.error("Error running workflow:", error);
-    process.exit(1);
-  }
-}
+//   // Log the input
+//   console.log(
+//     `Running workflow for integration: ${integration}, task: ${task}`,
+//   );
+
+//   try {
+//     // Run the workflow
+//     runWorkflow(integration, task);
+//   } catch (error) {
+//     console.error("Error running workflow:", error);
+//     process.exit(1);
+//   }
+// }
 
 // integrationAndTask().catch((error) => {
 //   console.error("Unhandled error:", error);
@@ -146,14 +194,7 @@ async function main() {
   console.log(`Processing scripts for integration: ${integration}`);
 
   try {
-    // Get all available scripts for the integration
-    const availableScripts = await getAllAvailableScripts(integration);
-
-    // Process each script
-    for (const script of availableScripts) {
-      console.log(`Processing script: ${script}`);
-      await runWorkflow(integration, script);
-    }
+    await runWorkflow(integration);
 
     console.log(`Finished processing all scripts for ${integration}`);
   } catch (error) {

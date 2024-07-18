@@ -70,4 +70,14 @@ export interface AgentState {
   additionalInfo?: string;
   submitted?: boolean;
   reviewed?: boolean;
+  // New parameters for Supervisor
+  supervisorState?: {
+    scripts: Array<{
+      name: string;
+      type: "Create" | "Read" | "Update" | "Delete";
+    }>;
+    currentIndex: number;
+  };
+  complete?: boolean;
+  taskType?: "Create" | "Read" | "Update" | "Delete";
 }

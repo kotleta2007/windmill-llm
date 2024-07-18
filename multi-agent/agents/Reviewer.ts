@@ -25,7 +25,7 @@ export async function reviewerFunc(
     reviewed: true,
   };
 
-  if (state.code && state.tests && state.testResults) {
+  if (state.code && state.tests && state.schema && state.testResults) {
     const input = `
       Review the following for integration: ${state.integration}, task: ${state.task}\n
       Code: ${state.code}\n
