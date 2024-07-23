@@ -7,6 +7,8 @@ import { testGenFunc } from "./agents/TestGenerator";
 import { initializeSupervisor } from "./agents/Supervisor";
 import type { Script } from "./agents/Supervisor";
 import { getAllAvailableScripts } from "./octokit";
+import { existsSync } from "fs";
+import { join } from "path";
 
 // Recursion Limit
 const NUM_CYCLES = 3;
@@ -190,10 +192,35 @@ async function main() {
   // Log the input
   console.log(`Processing scripts for integration: ${integration}`);
 
+  // List of script names to skip
+  const skippedScripts = ["play", "pause", "set-volume"]; // Add your skipped script names here
+
   try {
     const classifiedScripts = await initializeSupervisor(integration);
     // Process each script
     for (const script of classifiedScripts) {
+      console.log(`Checking script: ${script.name}`);
+
+      // Check if the script is in the skipped list
+      if (skippedScripts.includes(script.name)) {
+        console.log(`Skipping script: ${script.name}`);
+        continue;
+      }
+
+      // Check if the script already exists in the local Windmill hub
+      const scriptPath = join(
+        "hub",
+        integration,
+        "scripts",
+        "action",
+        script.name,
+      );
+      if (existsSync(scriptPath)) {
+        console.log(`Skipping existing script: ${script.name}`);
+        continue;
+      }
+
+      // If we've made it here, process the script
       console.log(`Processing script: ${script.name}`);
       await runWorkflow(integration, script);
     }
@@ -204,6 +231,37 @@ async function main() {
     process.exit(1);
   }
 }
+
+// async function main() {
+//   // Get command line arguments
+//   const args = process.argv.slice(2); // Remove the first two elements (node and script name)
+
+//   // Check if we have the correct number of arguments
+//   if (args.length !== 1) {
+//     console.error("Usage: bun run index.ts <integration>");
+//     process.exit(1);
+//   }
+
+//   // Extract integration from arguments
+//   const [integration] = args;
+
+//   // Log the input
+//   console.log(`Processing scripts for integration: ${integration}`);
+
+//   try {
+//     const classifiedScripts = await initializeSupervisor(integration);
+//     // Process each script
+//     for (const script of classifiedScripts) {
+//       console.log(`Processing script: ${script.name}`);
+//       await runWorkflow(integration, script);
+//     }
+
+//     console.log(`Finished processing all scripts for ${integration}`);
+//   } catch (error) {
+//     console.error("Error processing scripts:", error);
+//     process.exit(1);
+//   }
+// }
 
 // Call the main function
 main();
