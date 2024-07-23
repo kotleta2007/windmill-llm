@@ -4,7 +4,8 @@ import type { AgentState } from "./agents/Agent";
 import { reviewerFunc } from "./agents/Reviewer";
 import { codeGenFunc } from "./agents/CodeGenerator";
 import { testGenFunc } from "./agents/TestGenerator";
-import { supervisorFunc } from "./agents/Supervisor";
+import { initializeSupervisor } from "./agents/Supervisor";
+import type { Script } from "./agents/Supervisor";
 import { getAllAvailableScripts } from "./octokit";
 
 // Recursion Limit
@@ -26,11 +27,6 @@ const workflow = new StateGraph<AgentState>({
     additionalInfo: { value: (x, y) => y ?? x },
     submitted: { value: (x, y) => y ?? x ?? false },
     reviewed: { value: (x, y) => y ?? x ?? false },
-    // New channels for Supervisor
-    supervisorState: {
-      value: (x, y) => y ?? x ?? { scripts: [], currentIndex: 0 },
-    },
-    complete: { value: (x, y) => y ?? x ?? false },
     taskType: { value: (x, y) => y ?? x },
   },
 });
@@ -39,41 +35,30 @@ const workflow = new StateGraph<AgentState>({
 workflow.addNode("Reviewer", reviewerFunc);
 workflow.addNode("CodeGenerator", codeGenFunc);
 workflow.addNode("TestGenerator", testGenFunc);
-workflow.addNode("Supervisor", supervisorFunc);
 
 // Router function
 function router(state: AgentState) {
-  if (state.complete) {
+  if (state.submitted) {
     console.log("WE ARE DONE");
     return "end";
   }
 
   switch (state.sender) {
-    case "Supervisor":
-      return "CodeGenerator";
     case "CodeGenerator":
       return "TestGenerator";
     case "TestGenerator":
       return "Reviewer";
     case "Reviewer":
-      return "Supervisor";
+      return "CodeGenerator";
     default:
       // If no sender is set (initial state) or unknown sender, start with Supervisor
-      return "Supervisor";
+      return "CodeGenerator";
   }
 }
 
 // Define edges with the router
-workflow.addConditionalEdges("Supervisor", router, {
-  Supervisor: "Supervisor",
-  CodeGenerator: "CodeGenerator",
-  TestGenerator: "TestGenerator",
-  Reviewer: "Reviewer",
-  end: END,
-});
-
 workflow.addConditionalEdges("Reviewer", router, {
-  Supervisor: "Supervisor",
+  // Supervisor: "Supervisor",
   CodeGenerator: "CodeGenerator",
   TestGenerator: "TestGenerator",
   Reviewer: "Reviewer",
@@ -81,7 +66,7 @@ workflow.addConditionalEdges("Reviewer", router, {
 });
 
 workflow.addConditionalEdges("CodeGenerator", router, {
-  Supervisor: "Supervisor",
+  // Supervisor: "Supervisor",
   CodeGenerator: "CodeGenerator",
   TestGenerator: "TestGenerator",
   Reviewer: "Reviewer",
@@ -89,7 +74,7 @@ workflow.addConditionalEdges("CodeGenerator", router, {
 });
 
 workflow.addConditionalEdges("TestGenerator", router, {
-  Supervisor: "Supervisor",
+  // Supervisor: "Supervisor",
   CodeGenerator: "CodeGenerator",
   TestGenerator: "TestGenerator",
   Reviewer: "Reviewer",
@@ -106,7 +91,7 @@ workflow.addConditionalEdges("TestGenerator", router, {
 //   },
 // );
 
-workflow.addEdge(START, "Supervisor");
+workflow.addEdge(START, "CodeGenerator");
 
 // DO WE NEED THIS????
 // // Update the edges
@@ -117,19 +102,31 @@ workflow.addEdge(START, "Supervisor");
 const graph = workflow.compile();
 
 // Run the graph
-async function runWorkflow(integration: string) {
+async function runWorkflow(integration: string, script: Script) {
   const result = await graph.invoke(
     {
       integration: integration,
+      task: script.name,
+      taskType: script.type,
     },
-    {
-      recursionLimit: 4 * NUM_CYCLES + 1,
-    },
+    // {
+    //   recursionLimit: 10 * NUM_CYCLES + 1,
+    // },
   );
-
-  // console.log("Final Result:");
-  // console.log(JSON.stringify(result, null, 2));
 }
+// async function runWorkflow(integration: string) {
+//   const result = await graph.invoke(
+//     {
+//       integration: integration,
+//     },
+//     {
+//       recursionLimit: 3 * NUM_CYCLES + 1,
+//     },
+//   );
+
+//   // console.log("Final Result:");
+//   // console.log(JSON.stringify(result, null, 2));
+// }
 // async function runWorkflow(integration: string, task: string) {
 //   const result = await graph.invoke(
 //     {
@@ -194,7 +191,12 @@ async function main() {
   console.log(`Processing scripts for integration: ${integration}`);
 
   try {
-    await runWorkflow(integration);
+    const classifiedScripts = await initializeSupervisor(integration);
+    // Process each script
+    for (const script of classifiedScripts) {
+      console.log(`Processing script: ${script.name}`);
+      await runWorkflow(integration, script);
+    }
 
     console.log(`Finished processing all scripts for ${integration}`);
   } catch (error) {

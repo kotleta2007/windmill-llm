@@ -41,6 +41,8 @@ export async function codeGenFunc(
 
     Integration name: {integration}.
 
+    The script type is: ${state.taskType}
+
     Your code should look like this:
     {example}.
     You can find the necessary endpoints/logic in here:

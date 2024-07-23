@@ -33,6 +33,9 @@ const testGenerator = await createAgent(
 
 const userPrompt = `
   Generate a test for a script that does {task} in {integration}.
+
+  The script type is: {scriptType}.
+
   Here is the code we will be testing:
   {generatedCode}
 
@@ -66,6 +69,7 @@ export async function testGenFunc(
 
     let input = userPrompt
       .replace("{task}", state.task)
+      .replace("{scriptType}", state.taskType!.toString())
       .replace("{integration}", state.integration)
       .replace("{generatedCode}", state.code!)
       .replace(

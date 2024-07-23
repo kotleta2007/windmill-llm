@@ -6,65 +6,22 @@ const supervisorAgent = await createAgent(
   "Supervisor",
   `
   You are a supervisor agent coordinating the code generation process.
-  Your task is to classify scripts into CRUD categories and manage the generation of each script.
+  Your task is to classify scripts into CRUD categories.
   `,
   modelType,
 );
 
-interface Script {
+export interface Script {
   name: string;
   type: "Create" | "Read" | "Update" | "Delete";
 }
 
-export async function supervisorFunc(
-  state: AgentState,
-): Promise<Partial<AgentState>> {
-  console.log("Supervisor Agent called");
-
-  if (!state.supervisorState) {
-    // Initial state, start the process
-    const scripts = await getAllAvailableScripts(state.integration);
-    const classifiedScripts = await classifyScripts(scripts);
-    return {
-      ...state,
-      supervisorState: {
-        scripts: classifiedScripts,
-        currentIndex: 0,
-      },
-    };
-  }
-
-  if (
-    state.supervisorState.currentIndex >= state.supervisorState.scripts.length
-  ) {
-    // All scripts have been processed
-    console.log("All scripts have been generated");
-    return { ...state, complete: true };
-  }
-
-  const currentScript =
-    state.supervisorState.scripts[state.supervisorState.currentIndex];
-
-  if (state.sender === "Reviewer" && state.reviewed) {
-    // Move to the next script
-    console.log(`Script ${currentScript.name} has been generated and reviewed`);
-    return {
-      ...state,
-      supervisorState: {
-        ...state.supervisorState,
-        currentIndex: state.supervisorState.currentIndex + 1,
-      },
-    };
-  }
-
-  // Trigger code generation for the current script
-  console.log(`Triggering code generation for ${currentScript.name}`);
-  return {
-    ...state,
-    task: currentScript.name,
-    taskType: currentScript.type,
-    sender: "Supervisor",
-  };
+export async function initializeSupervisor(
+  integration: string,
+): Promise<Script[]> {
+  console.log("Initializing Supervisor");
+  const scripts = await getAllAvailableScripts(integration);
+  return classifyScripts(scripts);
 }
 
 async function classifyScripts(scripts: string[]): Promise<Script[]> {
