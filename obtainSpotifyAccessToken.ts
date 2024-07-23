@@ -42,7 +42,9 @@ const server = serve({
 
     if (url.pathname === "/login") {
       const state = generateRandomString(16);
-      const scope = "user-read-private user-read-email";
+      const scope = `user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public`;
+      // const scope = `ugc-image-upload user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-follow-modify user-follow-read user-read-playback-position user-top-read user-read-recently-played user-library-modify user-library-read user-read-email user-read-private user-soa-link user-soa-unlink soa-manage-entitlements soa-manage-partner soa-create-partner`;
+      // const scope = "user-read-private user-read-email";
 
       const authorizationUrl =
         "https://accounts.spotify.com/authorize?" +
