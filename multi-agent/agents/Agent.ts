@@ -1,12 +1,14 @@
 import { BaseMessage } from "@langchain/core/messages";
 import { ChatGroq } from "@langchain/groq";
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 // Model type
-export const modelType = "gpt-4o";
+// export const modelType = "gpt-4o";
+export const modelType = "claude-3-5-sonnet-20240620";
 
 // Agent creation helper
 export async function createAgent(
@@ -17,6 +19,12 @@ export async function createAgent(
   let llm: BaseChatModel;
 
   switch (modelType) {
+    case "claude-3-5-sonnet-20240620":
+      llm = new ChatAnthropic({
+        modelName: modelType,
+        temperature: 0,
+      });
+      break;
     case "gpt-3.5-turbo":
     case "gpt-3.5-turbo-16k":
     case "gpt-4":
