@@ -50,7 +50,7 @@ export async function reviewerFunc(
     // console.log(result.content);
 
     if (result.content.includes("VALIDATED")) {
-      const windmillResult = Windmill.submitToHub(
+      const windmillResult = await Windmill.submitToHub(
         state.integration,
         state.task,
         state.code,

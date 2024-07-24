@@ -14,6 +14,7 @@ export const codeGenerator = await createAgent(
   The name of the type should be the capitalized name of the integration.
   If you don't need any authentication, don't define a type!
   Return the type after the code encoded as a JSON schema.
+  The parameters of the type should be camelCase.
   Handle errors.
 
   Here's how interactions have to look like:
@@ -36,6 +37,20 @@ export async function codeGenFunc(
 ): Promise<Partial<AgentState>> {
   console.log("CodeGenerator Agent called");
 
+  // Check if schema.json exists
+  const schemaPath = path.join("hub", state.integration, "schema.json");
+  let existingSchema = "";
+  try {
+    existingSchema = await fs.readFile(schemaPath, "utf8");
+    console.log("Existing schema found and loaded.");
+  } catch (error) {
+    console.log("No existing schema found. A new one will be created.");
+  }
+
+  let schemaPrompt = existingSchema
+    ? `\n\nExisting schema for this integration:\n${existingSchema}\nPlease respect the resource type as specified in this JSON schema when generating the code.`
+    : "";
+
   let input = `
     Generate a standalone script that does {task} in {integration}.
 
@@ -47,6 +62,7 @@ export async function codeGenFunc(
     {example}.
     You can find the necessary endpoints/logic in here:
     {activePiecesPrompt}.
+    ${schemaPrompt}
     `
     .replace("{integration}", state.integration)
     .replace("{task}", state.task)
