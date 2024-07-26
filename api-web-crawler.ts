@@ -1,6 +1,11 @@
 import { Browser, Page, firefox } from "playwright";
 import * as cheerio from "cheerio";
 import { searchAndGetLinks } from "./tavily-request";
+import { load } from "cheerio";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { StructuredOutputParser } from "langchain/output_parsers";
+import { z } from "zod";
 
 interface ApiEndpoint {
   method: string;
@@ -18,41 +23,69 @@ async function fetchContent(page: Page, url: string): Promise<string> {
   }
 }
 
-function extractApiEndpoints(content: string): ApiEndpoint[] {
-  const $ = cheerio.load(content);
-  const endpoints: ApiEndpoint[] = [];
+function extractTextContent(content: string): string {
+  const $ = load(content);
 
-  $(
-    'span.IssueLabel:contains("get"), span.IssueLabel:contains("post"), span.IssueLabel:contains("put"), span.IssueLabel:contains("delete"), span.IssueLabel:contains("patch")',
-  ).each((_, element) => {
-    const methodElement = $(element);
-    const pathElement = methodElement.next("span");
-
-    if (pathElement.length) {
-      const method = methodElement.text().trim().toUpperCase();
-      const path = pathElement.text().trim();
-
-      if (method && path) {
-        endpoints.push({ method, path });
-      }
+  // Function to recursively extract text
+  function getText(node: cheerio.Element): string {
+    if (node.type === "text") {
+      return $(node).text().trim();
     }
+
+    if (node.type === "tag") {
+      const children = $(node).contents().toArray();
+      return children.map(getText).join("\n");
+    }
+
+    return "";
+  }
+
+  return $("body").contents().toArray().map(getText).join("\n").trim();
+}
+
+async function extractApiEndpoints(content: string): Promise<ApiEndpoint[]> {
+  // Extract text content from HTML
+  const textContent = extractTextContent(content);
+
+  // Define the output schema
+  const parser = StructuredOutputParser.fromZodSchema(
+    z.array(
+      z.object({
+        method: z.string(),
+        path: z.string(),
+        description: z.string().optional(),
+      }),
+    ),
+  );
+
+  // Create a prompt template
+  const prompt = new PromptTemplate({
+    template: `Extract API endpoints from the following text. Identify the HTTP method, path, and optional description for each endpoint.
+
+Text content:
+{text}
+
+{format_instructions}
+
+API Endpoints:`,
+    inputVariables: ["text"],
+    partialVariables: { format_instructions: parser.getFormatInstructions() },
   });
 
-  $("pre, code, table").each((_, element) => {
-    const text = $(element).text();
-    const matches = text.match(
-      /\b(GET|POST|PUT|DELETE|PATCH)\s+(\/[\w\/\-{}]+)/g,
-    );
-
-    if (matches) {
-      matches.forEach((match) => {
-        const [method, path] = match.split(/\s+/);
-        endpoints.push({ method, path });
-      });
-    }
+  // Initialize the Anthropic model
+  const model = new ChatAnthropic({
+    modelName: "claude-3-5-sonnet-20240620",
+    temperature: 0,
   });
 
-  return Array.from(new Set(endpoints.map(JSON.stringify))).map(JSON.parse);
+  // Generate the structured output
+  const input = await prompt.format({ text: textContent });
+  const response = await model.invoke(input);
+
+  // Parse the response
+  const result = await parser.parse(response.content);
+
+  return result;
 }
 
 export async function crawlAndExtractApiEndpoints(
@@ -69,7 +102,7 @@ export async function crawlAndExtractApiEndpoints(
     for (const link of links) {
       const content = await fetchContent(page, link);
       if (content) {
-        const endpoints = extractApiEndpoints(content);
+        const endpoints = await extractApiEndpoints(content);
         if (endpoints.length > 0) {
           endpointMap.set(link, endpoints);
         }
@@ -89,6 +122,7 @@ async function main() {
   try {
     const query = "Github API endpoints";
     const links = await searchAndGetLinks(query);
+
     const endpointMap = await crawlAndExtractApiEndpoints(links);
 
     for (const [link, endpoints] of endpointMap) {
@@ -102,4 +136,4 @@ async function main() {
   }
 }
 
-// main();
+main();

@@ -8,9 +8,9 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 // Model type
 // export const modelType = "gpt-4o";
-// export const modelType = "claude-3-5-sonnet-20240620";
+export const modelType = "claude-3-5-sonnet-20240620";
 // export const modelType = "llama-3.1-405b-reasoning";
-export const modelType = "llama-3.1-70b-versatile";
+// export const modelType = "llama-3.1-70b-versatile";
 
 // Agent creation helper
 export async function createAgent(

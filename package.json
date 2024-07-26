@@ -25,7 +25,7 @@
     "langchain": "^0.2.11",
     "llamaindex": "^0.4.12",
     "openai": "^4.52.3",
-    "playwright": "^1.45.1",
+    "playwright": "^1.45.3",
     "zod": "^3.23.8"
   }
 }
