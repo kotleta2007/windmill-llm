@@ -4,12 +4,12 @@ import { getAllAvailableScripts } from "../octokit";
 
 const supervisorAgent = await createAgent(
   "Supervisor",
+  modelType,
   `
   You are a supervisor agent coordinating the code generation process.
   Your task is to classify scripts into CRUD categories and identify triggers.
   Triggers are scripts that respond to external events rather than being explicitly called.
   `,
-  modelType,
 );
 
 export interface Script {

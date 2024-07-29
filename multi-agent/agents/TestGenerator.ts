@@ -10,6 +10,7 @@ import { ChatOpenAI } from "@langchain/openai";
 
 const testGenerator = await createAgent(
   "TestGenerator",
+  modelType,
   `
   You are a test generator for TypeScript code running on the Bun runtime.
   Your task is to create a single, self-sufficient script that tests the given input code.
@@ -30,7 +31,6 @@ const testGenerator = await createAgent(
 
   The code to be tested is in 'generated-code.ts' in the current working directory.
   `,
-  modelType,
 );
 
 const userPrompt = `

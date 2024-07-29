@@ -5,13 +5,13 @@ import { Tavily } from "../tools/Tavily";
 
 const reviewer = await createAgent(
   "Reviewer",
+  modelType,
   `
   You are a code reviewer.
   Your job is to analyze code, tests, and test results.
   You do not write code.
   You decide if the code meets the requirements and is ready for submission, or if it needs more work.
   `,
-  modelType,
 );
 
 export async function reviewerFunc(

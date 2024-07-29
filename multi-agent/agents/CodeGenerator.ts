@@ -6,6 +6,7 @@ import * as path from "path";
 
 export const codeGenerator = await createAgent(
   "CodeGenerator",
+  modelType,
   `
   You are tasked with creating a TypeScript script that can be either an action or a trigger.
   For actions, create a single main function exported as "export async function main(...)".
@@ -35,7 +36,6 @@ export const codeGenerator = await createAgent(
 
   Ensure the returned code adheres to this format.
   `,
-  modelType,
 );
 
 export async function codeGenFunc(

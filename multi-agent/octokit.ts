@@ -140,40 +140,45 @@ export async function getActivePiecesScripts(
 export async function getAllAvailableScripts(
   integration: string,
 ): Promise<string[]> {
+  const scripts: string[] = [];
+
+  async function fetchScripts(path: string): Promise<string[]> {
+    try {
+      const response = await octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: `packages/pieces/community/${integration}/src/lib/${path}`,
+      });
+
+      if (Array.isArray(response.data)) {
+        return response.data
+          .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
+          .map((item) => item.name.replace(".ts", ""));
+      }
+    } catch (error) {
+      console.warn(`No ${path} found for ${integration}:\n`, error);
+    }
+    return [];
+  }
+
   try {
-    const [actionsContents, triggersContents] = await Promise.all([
-      octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: `packages/pieces/community/${integration}/src/lib/actions`,
-      }),
-      octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: `packages/pieces/community/${integration}/src/lib/trigger`,
-      }),
+    const [actions, triggers] = await Promise.all([
+      fetchScripts("actions"),
+      fetchScripts("trigger"),
     ]);
 
-    const actions = Array.isArray(actionsContents.data)
-      ? actionsContents.data
-          .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
-          .map((item) => item.name.replace(".ts", ""))
-      : [];
+    console.log("Actions found:", actions);
+    console.log("Triggers found:", triggers);
 
-    const triggers = Array.isArray(triggersContents.data)
-      ? triggersContents.data
-          .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
-          .map((item) => item.name.replace(".ts", ""))
-      : [];
-
-    return [...actions, ...triggers];
+    scripts.push(...actions, ...triggers);
   } catch (error) {
     console.error(
       `Error fetching available scripts for ${integration}:`,
       error,
     );
-    return [];
   }
+
+  return scripts;
 }
 
 // Usage example:
