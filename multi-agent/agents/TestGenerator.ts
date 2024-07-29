@@ -65,11 +65,11 @@ async function logError(stderr: string, integration: string, task: string) {
     ${stderr}
 
     Provide the following information:
-    1. Is it an HTML error? (true/false)
-    2. If it's an HTML error, what is the error code?
+    1. Is it an HTTP error? (true/false)
+    2. If it's an HTTP error, what is the error code?
     3. The full text of the error message.
 
-    Format your response as a JSON object with keys: isHtmlError, htmlErrorCode, fullErrorMessage
+    Format your response as a JSON object with keys: isHttpError, httpErrorCode, fullErrorMessage
     Do not include any other text or formatting outside of the JSON object.
   `,
   );
@@ -91,8 +91,8 @@ async function logError(stderr: string, integration: string, task: string) {
     console.error("Raw response:", result.content);
     // Fallback to a default object if parsing fails
     errorAnalysis = {
-      isHtmlError: false,
-      htmlErrorCode: "N/A",
+      isHttpError: false,
+      httpErrorCode: "N/A",
       fullErrorMessage: "Failed to parse error analysis",
     };
   }
@@ -101,8 +101,8 @@ async function logError(stderr: string, integration: string, task: string) {
 DateTime: ${new Date().toISOString()}
 Integration: ${integration}
 Task: ${task}
-Is HTML Error: ${errorAnalysis.isHtmlError}
-HTML Error Code: ${errorAnalysis.htmlErrorCode || "N/A"}
+Is HTTP Error: ${errorAnalysis.isHttpError}
+HTTP Error Code: ${errorAnalysis.httpErrorCode || "N/A"}
 Full Error Message: ${errorAnalysis.fullErrorMessage}
 Raw STDERR: ${stderr}
 ---
