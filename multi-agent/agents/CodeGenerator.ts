@@ -7,17 +7,23 @@ import * as path from "path";
 export const codeGenerator = await createAgent(
   "CodeGenerator",
   `
-  You have to create a single script which performs just the asked action in typescript in one main function which you export like this: "export async function main(...)". Take as parameter any information you need.
-  Return the action result.
-  You should use fetch and are not allowed to import any libraries.
+  You are tasked with creating a TypeScript script that can be either an action or a trigger.
+  For actions, create a single main function exported as "export async function main(...)".
+  For triggers, create two functions:
+    1. "export async function run(...)" which performs the trigger logic.
+    2. "export async function getOptions(...)" which returns any dynamic options for the trigger.
+
+  Take as parameters any information you need.
+  Return the result of the action or trigger.
+  Use fetch for HTTP requests and do not import any external libraries.
   Define a type which contains the authentication information and only that.
   The name of the type should be the capitalized name of the integration.
-  If you don't need any authentication, don't define a type!
+  If no authentication is needed, don't define a type.
   Return the type after the code encoded as a JSON schema.
   The parameters of the type should be camelCase.
-  Handle errors.
+  Handle errors appropriately.
 
-  Here's how interactions have to look like:
+  Here's how interactions should look:
   user: [sample_question]
   assistant: \`\`\`typescript
   [code]
@@ -27,7 +33,7 @@ export const codeGenerator = await createAgent(
   [schema of resource type]
   \`\`\`
 
-  Check that the returned code adheres to this format.
+  Ensure the returned code adheres to this format.
   `,
   modelType,
 );
@@ -52,7 +58,7 @@ export async function codeGenFunc(
     : "";
 
   let input = `
-    Generate a standalone script that does {task} in {integration}.
+    Generate a standalone script that ${state.taskType === "Trigger" ? "implements a trigger for" : "performs the action of"} {task} in {integration}.
 
     Integration name: {integration}.
 
@@ -98,26 +104,50 @@ export async function codeGenFunc(
 }
 
 const exampleWindmillScript = `
-import { Octokit } from "https://cdn.skypack.dev/@octokit/rest";
+  import { getState, setState } from "windmill-client";
 
-/**
- * @param owner The account owner of the repository. The name is not case sensitive.
- *
- * @param repo The name of the repository. The name is not case sensitive.
- */
-type Github = {
-  token: string;
-};
-export async function main(gh_auth: Github, owner: string, repo: string) {
-  const octokit = new Octokit({ auth: gh_auth.token });
+  type Bitbucket = {
+    username: string;
+    password: string;
+  };
 
-  return await octokit.request("GET /repos/{owner}/{repo}", {
-    owner,
-    repo,
-    headers: {
-      "X-GitHub-Api-Version": "2022-11-28",
-      Accept: "application/vnd.github+json",
-    },
-  });
+  export async function main(
+    bitbucket: Bitbucket,
+    workspace: string,
+    repo: string,
+    branch: string
+  ) {
+    const lastChecked: number = (await getState()) || 0;
+
+    const response = await fetch(
+      "https://api.bitbucket.org/2.0/repositories/{workspace}/{repo}/commits?pagelen=100&include={branch}",
+    {
+      headers: {
+        Authorization:
+        "Basic " +
+          Buffer.from(bitbucket.username + ":" + bitbucket.password).toString(
+            "base64"
+          ),
+        },
+      }
+    );
+const data = await response.json();
+if (!response.ok) {
+  throw new Error(data.error.message);
 }
+const newCommits = [];
+for (const commit of data?.values || []) {
+  if (new Date(commit.date).getTime() > lastChecked) {
+    newCommits.push(commit);
+  } else {
+    break;
+  }
+}
+
+if (newCommits.length > 0) {
+  await setState(new Date(newCommits[0].date).getTime());
+}
+
+return newCommits;
+  }
 `;

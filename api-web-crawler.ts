@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { searchAndGetLinks } from "./tavily-request";
 import { load } from "cheerio";
 import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "langchain/output_parsers";
 import { z } from "zod";
@@ -73,10 +74,14 @@ API Endpoints:`,
   });
 
   // Initialize the Anthropic model
-  const model = new ChatAnthropic({
-    modelName: "claude-3-5-sonnet-20240620",
+  const model = new ChatOpenAI({
+    modelName: "gpt-4o",
     temperature: 0,
   });
+  // const model = new ChatAnthropic({
+  //   modelName: "claude-3-5-sonnet-20240620",
+  //   temperature: 0,
+  // });
 
   // Generate the structured output
   const input = await prompt.format({ text: textContent });

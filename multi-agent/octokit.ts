@@ -137,24 +137,36 @@ export async function getActivePiecesScripts(
   return output;
 }
 
-// New function to get available scripts for an integration
 export async function getAllAvailableScripts(
   integration: string,
 ): Promise<string[]> {
   try {
-    const { data: contents } = await octokit.rest.repos.getContent({
-      owner,
-      repo,
-      path: `packages/pieces/community/${integration}/src/lib/actions`,
-    });
+    const [actionsContents, triggersContents] = await Promise.all([
+      octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: `packages/pieces/community/${integration}/src/lib/actions`,
+      }),
+      octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: `packages/pieces/community/${integration}/src/lib/trigger`,
+      }),
+    ]);
 
-    if (!Array.isArray(contents)) {
-      throw new Error("Contents are not an array");
-    }
+    const actions = Array.isArray(actionsContents.data)
+      ? actionsContents.data
+          .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
+          .map((item) => item.name.replace(".ts", ""))
+      : [];
 
-    return contents
-      .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
-      .map((item) => item.name.replace(".ts", ""));
+    const triggers = Array.isArray(triggersContents.data)
+      ? triggersContents.data
+          .filter((item) => item.type === "file" && item.name.endsWith(".ts"))
+          .map((item) => item.name.replace(".ts", ""))
+      : [];
+
+    return [...actions, ...triggers];
   } catch (error) {
     console.error(
       `Error fetching available scripts for ${integration}:`,

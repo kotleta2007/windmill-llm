@@ -193,10 +193,19 @@ async function main() {
   console.log(`Processing scripts for integration: ${integration}`);
 
   // List of script names to skip
-  const skippedScripts = ["play", "pause", "set-volume", "update-playlist"]; // Add your skipped script names here
+  const skippedScripts = [
+    "play",
+    "pause",
+    "set-volume",
+    "update-playlist",
+    "index",
+  ]; // Add your skipped script names here
 
   try {
     const classifiedScripts = await initializeSupervisor(integration);
+
+    console.log(classifiedScripts);
+    let userResponse = prompt();
     // Process each script
     for (const script of classifiedScripts) {
       console.log(`Checking script: ${script.name}`);
