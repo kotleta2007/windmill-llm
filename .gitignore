@@ -1,5 +1,17 @@
 # Based on https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore
 
+# Error logs
+errors.log
+
+# Generated code / tests
+
+generated-code.ts
+generated-tests.ts
+hub/
+hubArchive/
+
+###################
+
 # Logs
 
 logs
