@@ -5,6 +5,8 @@ import { getActivePiecesScripts } from "../octokit";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { spawnSync } from "child_process";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
 
 const testGenerator = await createAgent(
   "TestGenerator",
@@ -49,6 +51,65 @@ const userPrompt = `
   If you need to find some value, make sure the code retrieves it using the API.
   Make sure that all the key requirements are met.
   `;
+
+async function logError(stderr: string, integration: string, task: string) {
+  // Initialize the Anthropic model
+  const model = new ChatOpenAI({
+    modelName: "gpt-4o",
+    temperature: 0,
+  });
+
+  const result = await model.invoke(
+    `
+    Analyze the following error message:
+    ${stderr}
+
+    Provide the following information:
+    1. Is it an HTML error? (true/false)
+    2. If it's an HTML error, what is the error code?
+    3. The full text of the error message.
+
+    Format your response as a JSON object with keys: isHtmlError, htmlErrorCode, fullErrorMessage
+    Do not include any other text or formatting outside of the JSON object.
+  `,
+  );
+
+  let jsonString = result.content;
+
+  // Remove any potential code block formatting
+  jsonString = jsonString.replace(/```json\n?|\n?```/g, "");
+
+  // Trim whitespace
+  jsonString = jsonString.trim();
+
+  // Attempt to parse the JSON
+  let errorAnalysis;
+  try {
+    errorAnalysis = JSON.parse(jsonString);
+  } catch (error) {
+    console.error("Failed to parse JSON:", error);
+    console.error("Raw response:", result.content);
+    // Fallback to a default object if parsing fails
+    errorAnalysis = {
+      isHtmlError: false,
+      htmlErrorCode: "N/A",
+      fullErrorMessage: "Failed to parse error analysis",
+    };
+  }
+
+  const logEntry = `
+DateTime: ${new Date().toISOString()}
+Integration: ${integration}
+Task: ${task}
+Is HTML Error: ${errorAnalysis.isHtmlError}
+HTML Error Code: ${errorAnalysis.htmlErrorCode || "N/A"}
+Full Error Message: ${errorAnalysis.fullErrorMessage}
+Raw STDERR: ${stderr}
+---
+`;
+
+  await fs.appendFile("errors.log", logEntry);
+}
 
 export async function testGenFunc(
   state: AgentState,
@@ -158,29 +219,86 @@ export async function testGenFunc(
         continue;
       }
 
-      // Try to execute the tests
       try {
         executionResult = spawnSync("bun", ["run", "generated-tests.ts"], {
           encoding: "utf8",
           stdio: "pipe",
-          env: process.env, // Pass through the current environment variables
+          env: process.env,
         });
 
         console.log("Test execution output:", executionResult.stdout);
         console.error("Test execution errors:", executionResult.stderr);
 
-        // Check if anything was printed to STDERR
         if (executionResult.stderr && executionResult.stderr.trim() !== "") {
           throw new Error("Execution produced output to STDERR");
         }
 
-        // If we reach here, execution was successful
         executionSuccessful = true;
       } catch (error) {
         console.error(`Error executing tests: ${error}`);
-        feedback = `Test execution failed. Error: ${error}\nStdout: ${executionResult?.stdout}\nStderr: ${executionResult?.stderr}`;
-        isSelfSufficient = false;
-        executionSuccessful = false;
+
+        // Log the error and analyze it
+        await logError(executionResult.stderr, state.integration, state.task);
+
+        // Analyze the error
+        const errorAnalysis = await analyzeError(executionResult.stderr);
+
+        if (errorAnalysis.isHttpError) {
+          switch (errorAnalysis.httpErrorCode) {
+            case 401:
+            case 403:
+              console.error(
+                `Error: Bad Credentials or Forbidden Access - Halting generation process for ${state.integration}`,
+              );
+              return {
+                ...state,
+                sender: "TestGenerator",
+                testResults: `Generation halted due to authentication error.`,
+                isSelfSufficient: false,
+                testGenerationFeedback: `Error: ${errorAnalysis.fullErrorMessage}. Please check your credentials for ${state.integration}.`,
+              };
+
+            case 429:
+              console.log(
+                "Rate limit reached. Waiting for 60 seconds before retrying...",
+              );
+              await new Promise((resolve) => setTimeout(resolve, 60000));
+              continue;
+
+            case 404:
+              console.log(
+                "Endpoint not found. Searching for alternative endpoints...",
+              );
+              feedback =
+                "Endpoint not found. Attempting to find alternative endpoints.";
+              isSelfSufficient = false;
+              continue;
+
+            case 500:
+            case 502:
+            case 503:
+            case 504:
+              console.error(
+                `Server-side error encountered: ${errorAnalysis.fullErrorMessage}`,
+              );
+              return {
+                ...state,
+                sender: "TestGenerator",
+                testResults: "Generation failed due to server-side error.",
+                isSelfSufficient: false,
+                testGenerationFeedback: `Server Error: ${errorAnalysis.fullErrorMessage}. Please try again later.`,
+              };
+
+            default:
+              feedback = `Test execution failed. Error: ${errorAnalysis.fullErrorMessage}`;
+              isSelfSufficient = false;
+              executionSuccessful = false;
+          }
+        } else {
+          feedback = `Test execution failed. Error: ${errorAnalysis.fullErrorMessage}`;
+          isSelfSufficient = false;
+          executionSuccessful = false;
+        }
       }
     } else {
       feedback = checkResult.content.replace("NEEDS WORK", "").trim();
@@ -201,4 +319,41 @@ export async function testGenFunc(
     stdout: executionSuccessful ? executionResult?.stdout : undefined,
     stderr: executionSuccessful ? executionResult?.stderr : undefined,
   };
+}
+
+async function analyzeError(stderr: string): Promise<any> {
+  const model = new ChatOpenAI({
+    modelName: "gpt-4o",
+    temperature: 0,
+  });
+
+  const result = await model.invoke(
+    `
+    Analyze the following error message:
+    ${stderr}
+
+    Provide the following information:
+    1. Is it an HTTP error? (true/false)
+    2. If it's an HTTP error, what is the error code?
+    3. The full text of the error message.
+
+    Format your response as a JSON object with keys: isHttpError, httpErrorCode, fullErrorMessage
+    Do not include any other text or formatting outside of the JSON object.
+  `,
+  );
+
+  let jsonString = result.content;
+  jsonString = jsonString.replace(/```json\n?|\n?```/g, "").trim();
+
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.error("Failed to parse JSON:", error);
+    console.error("Raw response:", result.content);
+    return {
+      isHttpError: false,
+      httpErrorCode: null,
+      fullErrorMessage: "Failed to parse error analysis",
+    };
+  }
 }
