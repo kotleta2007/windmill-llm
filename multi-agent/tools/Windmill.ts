@@ -15,7 +15,7 @@ export const Windmill = {
     const scriptsDir = path.join(integrationDir, "scripts", "action", task);
     const codeFilePath = path.join(scriptsDir, "script.fetch.ts");
     const testsFilePath = path.join(scriptsDir, "script.test.ts");
-    const schemaFilePath = path.join(integrationDir, "schema.json");
+    const schemaFilePath = path.join(integrationDir, "resource_type.json");
     const metadataFilePath = path.join(scriptsDir, "script.json");
 
     // Create directories if they don't exist
