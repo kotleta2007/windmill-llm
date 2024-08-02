@@ -13,6 +13,7 @@ const testGenerator = await createAgent(
   modelType,
   `
   You are a test generator for TypeScript code running on the Bun runtime.
+  Do not use "bun test", the tests have to be runnable with "bun run".
   Your task is to create a single, self-sufficient script that tests the given input code.
 
   Key requirements:
@@ -22,6 +23,7 @@ const testGenerator = await createAgent(
   4. The test should not contain any placeholder variables or mock values that have to be replaced manually.
   5. If resources are needed, use the API to create them within the test.
   6. The test must be runnable without human intervention.
+  7. The test must not produce any output on STDERR when run successfully.
 
   Available environment variables:
   ${getEnvVariableNames().toString()}
@@ -30,6 +32,8 @@ const testGenerator = await createAgent(
   ${getDependencies().toString()}
 
   The code to be tested is in 'generated-code.ts' in the current working directory.
+  You can assume this file exists and contains the code to be tested.
+  Do not check for its existence.
   `,
 );
 
@@ -49,7 +53,12 @@ const userPrompt = `
   Make sure the code is runnable.
   Don't use placeholder variables: no one will replace them.
   If you need to find some value, make sure the code retrieves it using the API.
+  If fetch fails, consider using XMLRPC instead of REST API.
   Make sure that all the key requirements are met.
+
+  Make sure that the correct execution of the tests yields nothing on STDERR.
+  None of the tests should be negative. Every test should model a successful execution.
+  If there is an error, the test should write the error message to STDERR.
   `;
 
 async function logError(stderr: string, integration: string, task: string) {
