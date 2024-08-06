@@ -57,9 +57,7 @@ export async function codeGenFunc(
   } else if (state.taskType === "Trigger") {
     systemPrompt = `
     You are tasked with creating a TypeScript script for a trigger.
-    Create two functions:
-      1. "export async function run(...)" which performs the trigger logic.
-      2. "export async function getOptions(...)" which returns any dynamic options for the trigger.
+    Create a single main function exported as "export async function main(...)".
     Take as parameters any information you need.
     Return the result of the trigger.
     Use fetch for HTTP requests and do not import any external libraries.
@@ -69,6 +67,8 @@ export async function codeGenFunc(
     Return the type after the code encoded as a JSON schema.
     The parameters of the type should be camelCase.
     Handle errors appropriately.
+
+    Import the getState() and setState() functions from the "./localState.ts" file.
 
     Here's how interactions have to look like:
     user: [sample_question]

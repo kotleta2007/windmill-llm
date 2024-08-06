@@ -5,127 +5,131 @@ import { getActivePiecesScripts } from "../octokit";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { spawnSync } from "child_process";
-import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
 
-const testGenerator = await createAgent(
-  "TestGenerator",
-  modelType,
-  `
-  You are a test generator for TypeScript code running on the Bun runtime.
-  Do not use "bun test", the tests have to be runnable with "bun run".
-  Your task is to create a single, self-sufficient script that tests the given input code.
-
-  Key requirements:
-  1. The test must verify that the code accomplishes the specified task.
-  2. Use only the available environment variables and dependencies listed below.
-  3. Ensure all parameters are valid and the code is runnable.
-  4. The test should not contain any placeholder variables or mock values that have to be replaced manually.
-  5. If resources are needed, use the API to create them within the test.
-  6. The test must be runnable without human intervention.
-  7. The test must not produce any output on STDERR when run successfully.
-
-  Available environment variables:
-  ${getEnvVariableNames().toString()}
-
-  Available dependencies:
-  ${getDependencies().toString()}
-
-  The code to be tested is in 'generated-code.ts' in the current working directory.
-  You can assume this file exists and contains the code to be tested.
-  Do not check for its existence.
-  `,
-);
-
-const userPrompt = `
-  Generate a test for a script that does {task} in {integration}.
-
-  The script type is: {scriptType}.
-
-  Here is the code we will be testing:
-  {generatedCode}
-
-  You can find the necessary endpoints/logic in here:
-  {activePiecesPrompt}
-
-  Don't use any external libraries that you don't really need.
-  The libraries you have are already listed in the system prompt for you.
-  Make sure the code is runnable.
-  Don't use placeholder variables: no one will replace them.
-  If you need to find some value, make sure the code retrieves it using the API.
-  If fetch fails, consider using XMLRPC instead of REST API.
-  Make sure that all the key requirements are met.
-
-  Make sure that the correct execution of the tests yields nothing on STDERR.
-  None of the tests should be negative. Every test should model a successful execution.
-  If there is an error, the test should write the error message to STDERR.
-  `;
-
-async function logError(stderr: string, integration: string, task: string) {
-  // Initialize the Anthropic model
-  const model = new ChatOpenAI({
-    modelName: "gpt-4o",
-    temperature: 0,
-  });
-
-  const result = await model.invoke(
-    `
-    Analyze the following error message:
-    ${stderr}
-
-    Provide the following information:
-    1. Is it an HTTP error? (true/false)
-    2. If it's an HTTP error, what is the error code?
-    3. The full text of the error message.
-
-    Format your response as a JSON object with keys: isHttpError, httpErrorCode, fullErrorMessage
-    Do not include any other text or formatting outside of the JSON object.
-  `,
-  );
-
-  let jsonString = result.content;
-
-  // Remove any potential code block formatting
-  jsonString = jsonString.replace(/```json\n?|\n?```/g, "");
-
-  // Trim whitespace
-  jsonString = jsonString.trim();
-
-  // Attempt to parse the JSON
-  let errorAnalysis;
-  try {
-    errorAnalysis = JSON.parse(jsonString);
-  } catch (error) {
-    console.error("Failed to parse JSON:", error);
-    console.error("Raw response:", result.content);
-    // Fallback to a default object if parsing fails
-    errorAnalysis = {
-      isHttpError: false,
-      httpErrorCode: "N/A",
-      fullErrorMessage: "Failed to parse error analysis",
-    };
-  }
-
-  const logEntry = `
-DateTime: ${new Date().toISOString()}
-Integration: ${integration}
-Task: ${task}
-Is HTTP Error: ${errorAnalysis.isHttpError}
-HTTP Error Code: ${errorAnalysis.httpErrorCode || "N/A"}
-Full Error Message: ${errorAnalysis.fullErrorMessage}
-Raw STDERR: ${stderr}
----
-`;
-
-  await fs.appendFile("errors.log", logEntry);
-}
+const testGenerator = await createAgent("TestGenerator", modelType);
 
 export async function testGenFunc(
   state: AgentState,
 ): Promise<Partial<AgentState>> {
   console.log("TestGenerator Agent called");
 
-  const maxAttempts = 5; // Maximum number of attempts to generate self-sufficient tests
+  let systemPrompt = `
+    You are a test generator for TypeScript code running on the Bun runtime.
+    Do not use "bun test", the tests have to be runnable with "bun run".
+    Your task is to create a single, self-sufficient script that tests the given input code.
+
+    Key requirements:
+    1. The test must verify that the code accomplishes the specified task.
+    2. Use only the available environment variables and dependencies listed below.
+    3. Ensure all parameters are valid and the code is runnable.
+    4. The test should not contain any placeholder variables or mock values that have to be replaced manually.
+    5. If resources are needed, use the API to create them within the test.
+    6. The test must be runnable without human intervention.
+    7. The test must not produce any output on STDERR when run successfully.
+
+    For action scripts (Create, Read, Update, Delete):
+    - The script has a single main function exported as "export async function main(...)".
+    - Create a test that calls this main function with appropriate parameters.
+    - Verify that the result of the action is correct.
+
+    For trigger scripts:
+    - The script has a single main function exported as "export async function main(...)".
+    - Create a test that calls this main function with appropriate parameters.
+    - Verify that the result of the trigger is correct.
+
+    For trigger scripts, make sure the test:
+        - runs the trigger by calling the main trigger function (to set the initial state, don't set the initial state manually)
+        - creates the external action that triggers the trigger, so that the trigger's state changes.
+        - checks the state after the trigger (by calling the main function of the trigger script, not manually)
+        - the trigger states should be different
+
+    Use fetch for HTTP requests and do not import any external libraries.
+    Handle errors appropriately.
+
+    Available environment variables:
+    ${getEnvVariableNames().toString()}
+
+    Available dependencies:
+    ${getDependencies().toString()}
+
+    The code to be tested is in 'generated-code.ts' in the current working directory.
+    You can assume this file exists and contains the code to be tested.
+    Do not check for its existence.
+
+    Here's how interactions have to look like:
+    user: [sample_question]
+    assistant: \`\`\`typescript
+    [test code]
+    \`\`\`
+
+    Check that the returned code adheres to this format.
+    `;
+  let userPrompt = "";
+
+  if (["Create", "Read", "Update", "Delete"].includes(state.taskType!)) {
+    userPrompt = `
+    Generate a test for a script that performs the action of ${state.task} in ${state.integration}.
+
+    Integration name: ${state.integration}.
+    The script type is: ${state.taskType}
+
+    Here is the code we will be testing:
+    ${state.code}
+
+    You can find the necessary endpoints/logic in here:
+    ${await getActivePiecesScripts(state.integration, state.task)}
+
+    Don't use any external libraries that you don't really need.
+    The libraries you have are already listed in the system prompt for you.
+    Make sure the code is runnable.
+    Don't use placeholder variables: no one will replace them.
+    If you need to find some value, make sure the code retrieves it using the API.
+    Make sure that all the key requirements are met.
+
+    Make sure that the correct execution of the tests yields nothing on STDERR.
+    None of the tests should be negative. Every test should model a successful execution.
+    If there is an error, the test should write the error message to STDERR.
+    `;
+  } else if (state.taskType === "Trigger") {
+    userPrompt = `
+    Generate a test for a script that implements a trigger for ${state.task} in ${state.integration}.
+
+    Integration name: ${state.integration}.
+    The script type is: ${state.taskType}
+
+    Here is the code we will be testing:
+    ${state.code}
+
+    You can find the necessary endpoints/logic in here:
+    ${await getActivePiecesScripts(state.integration, state.task)}
+
+    Don't use any external libraries that you don't really need.
+    The libraries you have are already listed in the system prompt for you.
+    Make sure the code is runnable.
+    Don't use placeholder variables: no one will replace them.
+    If you need to find some value, make sure the code retrieves it using the API.
+    Make sure that all the key requirements are met.
+
+    Make sure that the correct execution of the tests yields nothing on STDERR.
+    None of the tests should be negative. Every test should model a successful execution.
+    If there is an error, the test should write the error message to STDERR.
+
+    Remember to test the main function of the trigger script and use getState() and setState() if needed.
+
+    Make sure the test:
+    - starts the trigger
+    - creates the external action that triggers the trigger
+    - checks the state after the trigger
+    - the trigger states should be different
+    `;
+  }
+
+  if (state.additionalInfo) {
+    userPrompt += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
+  }
+
+  const maxAttempts = 5;
   let attempt = 0;
   let tests = "";
   let isSelfSufficient = false;
@@ -137,29 +141,16 @@ export async function testGenFunc(
     attempt++;
     console.log(`Test generation attempt ${attempt}`);
 
-    let input = userPrompt
-      .replace("{task}", state.task)
-      .replace("{scriptType}", state.taskType!.toString())
-      .replace("{integration}", state.integration)
-      .replace("{generatedCode}", state.code!)
-      .replace(
-        "{activePiecesPrompt}",
-        await getActivePiecesScripts(state.integration, state.task),
-      );
-
-    if (state.additionalInfo) {
-      input += `\n\nAdditional info obtained from Tavily: ${state.additionalInfo}`;
-    }
-
     if (attempt > 1) {
-      input += `
+      userPrompt += `
       Previous attempt was not self-sufficient or failed to execute.
       Please address the following feedback and ensure the test code is completely self-sufficient,
       without any placeholders or mock values that require human intervention:\n${feedback}`;
     }
 
     const result = await testGenerator.invoke({
-      input: input,
+      system: systemPrompt,
+      input: userPrompt,
     });
 
     const match = result.content.match(/```typescript\n([\s\S]*?)\n```/);
@@ -167,16 +158,8 @@ export async function testGenFunc(
 
     // Check if it's self-sufficient
     const checkResult = await testGenerator.invoke({
-      input:
-        userPrompt
-          .replace("{task}", state.task)
-          .replace("{integration}", state.integration)
-          .replace("{generatedCode}", state.code!)
-          .replace(
-            "{activePiecesPrompt}",
-            await getActivePiecesScripts(state.integration, state.task),
-          ) +
-        `
+      system: systemPrompt,
+      input: `
         Is the following test code self-sufficient?
         Is it free from variables that have to be replaced by a human so that the tests can be run?
         Does it have all the resources it needs (it acquired them, created them or found the necessary credentials in these env variables)?
@@ -197,7 +180,7 @@ export async function testGenFunc(
         ${getEnvVariableNames().toString()}
         Else, say NEEDS WORK.
         Your response must end with either FINAL or NEEDS WORK.
-    `,
+      `,
     });
 
     console.log(checkResult.content);
@@ -205,19 +188,17 @@ export async function testGenFunc(
     isSelfSufficient = checkResult.content.includes("FINAL");
 
     if (isSelfSufficient) {
-      // Extract the final code from checkResult
       const finalCodeMatch = checkResult.content.match(
         /```typescript\n([\s\S]*?)\n```/,
       );
       if (finalCodeMatch) {
-        tests = finalCodeMatch[1]; // Update tests with the final code
+        tests = finalCodeMatch[1];
       } else {
         console.error("No final code block found in checkResult");
         isSelfSufficient = false;
         continue;
       }
 
-      // Write the tests to a local file
       try {
         const filePath = path.join(process.cwd(), "generated-tests.ts");
         await fs.writeFile(filePath, tests, "utf8");
@@ -246,10 +227,8 @@ export async function testGenFunc(
       } catch (error) {
         console.error(`Error executing tests: ${error}`);
 
-        // Log the error and analyze it
         await logError(executionResult.stderr, state.integration, state.task);
 
-        // Analyze the error
         const errorAnalysis = await analyzeError(executionResult.stderr);
 
         if (errorAnalysis.isHttpError) {
@@ -328,6 +307,67 @@ export async function testGenFunc(
     stdout: executionSuccessful ? executionResult?.stdout : undefined,
     stderr: executionSuccessful ? executionResult?.stderr : undefined,
   };
+}
+
+/// ----
+
+async function logError(stderr: string, integration: string, task: string) {
+  // Initialize the Anthropic model
+  const model = new ChatOpenAI({
+    modelName: "gpt-4o",
+    temperature: 0,
+  });
+
+  const result = await model.invoke(
+    `
+    Analyze the following error message:
+    ${stderr}
+
+    Provide the following information:
+    1. Is it an HTTP error? (true/false)
+    2. If it's an HTTP error, what is the error code?
+    3. The full text of the error message.
+
+    Format your response as a JSON object with keys: isHttpError, httpErrorCode, fullErrorMessage
+    Do not include any other text or formatting outside of the JSON object.
+  `,
+  );
+
+  let jsonString = result.content;
+
+  // Remove any potential code block formatting
+  jsonString = jsonString.replace(/```json\n?|\n?```/g, "");
+
+  // Trim whitespace
+  jsonString = jsonString.trim();
+
+  // Attempt to parse the JSON
+  let errorAnalysis;
+  try {
+    errorAnalysis = JSON.parse(jsonString);
+  } catch (error) {
+    console.error("Failed to parse JSON:", error);
+    console.error("Raw response:", result.content);
+    // Fallback to a default object if parsing fails
+    errorAnalysis = {
+      isHttpError: false,
+      httpErrorCode: "N/A",
+      fullErrorMessage: "Failed to parse error analysis",
+    };
+  }
+
+  const logEntry = `
+DateTime: ${new Date().toISOString()}
+Integration: ${integration}
+Task: ${task}
+Is HTTP Error: ${errorAnalysis.isHttpError}
+HTTP Error Code: ${errorAnalysis.httpErrorCode || "N/A"}
+Full Error Message: ${errorAnalysis.fullErrorMessage}
+Raw STDERR: ${stderr}
+---
+`;
+
+  await fs.appendFile("errors.log", logEntry);
 }
 
 async function analyzeError(stderr: string): Promise<any> {
