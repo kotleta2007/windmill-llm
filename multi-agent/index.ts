@@ -194,11 +194,15 @@ async function main() {
 
   // List of script names to skip
   const skippedScripts = [
-    "play",
-    "pause",
-    "set-volume",
-    "update-playlist",
-    "index",
+    "create-invite-link",
+    "get-chat-member",
+    "send-media.action",
+    "send-text-message.action",
+    // "play",
+    // "pause",
+    // "set-volume",
+    // "update-playlist",
+    // "index",
   ]; // Add your skipped script names here
 
   try {
